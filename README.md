@@ -11,7 +11,7 @@ python --version #을 통해서 파이썬 버젼 확인!!  3.11이 아니면 3.1
 py -3.11 -m venv .guideon_AI
 #mac 생성 :python3.11 -m venv .guideon_AI 
  
-#가상환경이름=.guideon_AI 
+#가상환경이름=guideon_AI 
 
 # Windows 활성화부분
 .guideon_AI\Scripts\activate
