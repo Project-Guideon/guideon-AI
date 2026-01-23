@@ -1,4 +1,5 @@
 # virtual environments
+.guideon_AI/
 .venv/
 venv/
 env/
@@ -8,16 +9,6 @@ ENV/
 # python
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
 
-# logs
-*.log
-
-# editors
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
+# env
+.env
