@@ -28,13 +28,15 @@ google-auth>=2.25,<3.0 # Google Cloud 인증 담당
 
 # ===============================
 # RAG
+# sentence-transformers/all-MiniLM-L6-v2
+# 일단 제일 가벼운거로 실험 하고 나중에 성능 보고 결정할 예정
 # ===============================
 langchain>=0.1,<0.3 # RAG 전체 파이프라인 관리
 langchain-community>=0.0.20,<0.3 # 랭체인 로더
 sentence-transformers>=2.2,<3.0 # 문장 임베딩
 faiss-cpu>=1.7,<2.0 # 벡터 저장
 pypdf>=4.0,<5.0 # pdf 로더
-
+pdfplumber
 # ===============================
 # Database (Postgres / pgvector)
 # ===============================
@@ -42,6 +44,7 @@ psycopg[binary]>=3.1,<4.0 # Python → Postgres 연결 드라이버
 pgvector>=0.2,<1.0 # Postgres에서 벡터 검색(RAG)할 때 필요
 
 # ===============================
-# redis 파이썬 부분도 필요한가????
+# redis
 # ===============================
-# redis>=5.0,<6.0
+#redis==8.6
+
