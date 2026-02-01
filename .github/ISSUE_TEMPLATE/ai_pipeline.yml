@@ -1,0 +1,55 @@
+#RAG / LangGraph 작업용 이슈 템플릿
+name: 🧠 AI Pipeline / RAG Task
+description: RAG, LangGraph, 프롬프트, 체인 구성 작업
+title: "[AI-PIPELINE] "
+labels: ["ai", "rag", "pipeline"]
+
+body:
+  - type: dropdown
+    id: pipeline_type
+    attributes:
+      label: Pipeline Type
+      options:
+        - RAG
+        - LangGraph
+        - Prompt Engineering
+        - Retriever / Index
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What & Why
+      description: 무엇을 왜 바꾸는지
+      placeholder: |
+        - 일본어 입력 → 한국어 문서 RAG → 일본어 출력 파이프라인 구성
+    validations:
+      required: true
+
+  - type: textarea
+    id: asis
+    attributes:
+      label: AS-IS
+      placeholder: |
+        - 일본어 질문 시 문서 검색 실패
+    validations:
+      required: true
+
+  - type: textarea
+    id: tobe
+    attributes:
+      label: TO-BE
+      placeholder: |
+        - 입력 번역 → 한국어 RAG → 출력 재번역
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: To-Do
+      placeholder: |
+        - [ ] Translator tool 추가
+        - [ ] Retriever 앞단에 삽입
+        - [ ] 프롬프트 수정

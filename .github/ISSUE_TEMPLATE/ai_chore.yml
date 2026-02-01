@@ -1,0 +1,25 @@
+#AI 성능 튜닝, 모델 교체, 코드 정리용 이슈 템플릿
+name: ♻️ AI Chore / Refactor
+description: 성능 튜닝, 모델 교체, 코드 정리
+title: "[AI-CHORE] "
+labels: ["ai", "refactor"]
+
+body:
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options:
+        - Performance
+        - Model Change
+        - Prompt Cleanup
+        - Code Refactor
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+    validations:
+      required: true

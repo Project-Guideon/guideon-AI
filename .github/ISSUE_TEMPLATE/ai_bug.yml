@@ -1,0 +1,60 @@
+#AI 전용 버그 템플릿 
+name: 🐛 AI Bug Report
+description: LLM/RAG/Inference 오류 제보
+title: "[AI-BUG] "
+labels: ["bug", "ai"]
+
+body:
+  - type: dropdown
+    id: bug_type
+    attributes:
+      label: Bug Type
+      options:
+        - Hallucination
+        - RAG Retrieval Failure
+        - Wrong Answer
+        - Timeout / Slow
+        - Tool / Chain Error
+    validations:
+      required: true
+
+  - type: textarea
+    id: user_input
+    attributes:
+      label: User Input
+      placeholder: |
+        "경복궁 화장실 어디야?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Output
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Output
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: RAG Context / Retrieved Docs
+      description: 검색된 문서나 컨텍스트
+      render: markdown
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Model / Config
+      placeholder: |
+        - model: gpt-4.1-mini
+        - temperature: 0.3
+        - retriever: pgvector

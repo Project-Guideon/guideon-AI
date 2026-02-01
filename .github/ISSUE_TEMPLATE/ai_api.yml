@@ -1,0 +1,61 @@
+#FastAPI Internal API 구현용 이슈 템플릿
+name: 🤖 AI API Implementation (FastAPI)
+description: FastAPI 내부 AI API 구현 작업
+title: "[AI-API] "
+labels: ["ai", "fastapi", "api"]
+
+body:
+  - type: dropdown
+    id: api_type
+    attributes:
+      label: API Type
+      options:
+        - Inference (추론)
+        - RAG
+        - STT
+        - TTS
+        - POI Search
+    validations:
+      required: true
+
+  - type: input
+    id: endpoint
+    attributes:
+      label: Endpoint
+      placeholder: "/internal/v1/chat/execute"
+    validations:
+      required: true
+
+  - type: textarea
+    id: request
+    attributes:
+      label: Request Spec
+      description: FastAPI가 받을 입력(JSON)
+      render: json
+      placeholder: |
+        {
+          "site_id": 1,
+          "session_id": "guest_123",
+          "input": { "text": "화장실 어디야?" }
+        }
+    validations:
+      required: true
+
+  - type: textarea
+    id: response
+    attributes:
+      label: Response Spec
+      description: FastAPI 응답(JSON)
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: To-Do
+      placeholder: |
+        - [ ] Pydantic schema 정의
+        - [ ] Service/Chain 연결
+        - [ ] 예외 처리
+        - [ ] 테스트
