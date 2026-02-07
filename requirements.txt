@@ -48,3 +48,10 @@ pgvector>=0.2,<1.0 # Postgres에서 벡터 검색(RAG)할 때 필요
 # ===============================
 #redis==8.6
 
+# LLM
+langchain>=0.2,<0.4
+langchain-openai>=0.1.0,<0.2
+
+openai>=1.30,<2.0
+
+python-multipart>=0.0.9,<1.0
