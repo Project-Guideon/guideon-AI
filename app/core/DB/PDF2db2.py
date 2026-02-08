@@ -13,7 +13,7 @@ from app.core.DB.connect_db import get_conn
 BASE_DIR = Path(__file__).resolve().parents[1]  # app/core
 DATA_DIR = BASE_DIR / "data"
 
-MODEL_NAME = "all-mpnet-base-v2"  # 768 dim (중간 성능, 무료)
+MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"  # 768 dim (다국어, 한국어 최적화)
 model = SentenceTransformer(MODEL_NAME)
 
 
@@ -106,8 +106,8 @@ def chunk_text(text: str, chunk_size: int = 900, chunk_overlap: int = 150) -> Li
 def ingest_pdf(
     pdf_filename: str,
     site_id: int = 1,  # 테스트용 기본값 (실제로는 백엔드에서 받아야 함)
-    chunk_size: int = 900,
-    chunk_overlap: int = 150,
+    chunk_size: int = 600,
+    chunk_overlap: int = 100,
     reset: bool = False,
 ):
     pdf_path = DATA_DIR / pdf_filename

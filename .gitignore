@@ -12,3 +12,6 @@ __pycache__/
 
 # env
 .env
+
+#.txt
+.guide_on 로컬 실행방법.txt
