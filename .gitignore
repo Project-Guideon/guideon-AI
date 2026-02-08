@@ -10,8 +10,9 @@ ENV/
 __pycache__/
 *.pyc
 
-# env
+# credentials & environment
+google_key.json
 .env
 
-#.txt
+# documentation
 .guide_on 로컬 실행방법.txt
