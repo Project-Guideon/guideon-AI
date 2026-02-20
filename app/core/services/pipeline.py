@@ -32,9 +32,18 @@ class VoicePipeline:
             voice = self.tts.synthesize(answer) #텍스트를 음성데이터(bytes)로 변환
             return VoiceQAResult(query="", answer=answer, voice_bytes=voice, contexts=[])
 
+        print(f"\n[STT] 인식된 텍스트: {query}")
+
         #아랫부분 langraph호출해서 처리로 바꾸기
-        contexts = self.rag.retrieve(query=query, site_id=site_id, k=k) 
+        contexts = self.rag.retrieve(query=query, site_id=site_id, k=k)
+        print(f"[RAG] 검색된 청크 수: {len(contexts)}")
+        for i, c in enumerate(contexts):
+            print(f"  [{i+1}] similarity={c.similarity:.4f} | {c.content[:60]}...")
+
         answer = self.llm.generate(query=query, contexts=contexts)
+        print(f"[LLM] 생성된 답변: {answer}")
+
         voice = self.tts.synthesize(answer)
+        print(f"[TTS] 음성 생성 완료: {len(voice)} bytes\n")
 
         return VoiceQAResult(query=query, answer=answer, voice_bytes=voice, contexts=contexts)

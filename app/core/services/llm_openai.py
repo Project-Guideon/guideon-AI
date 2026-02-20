@@ -12,7 +12,7 @@ from app.core.services.rag_pgvector import RetrievedChunk
 class LLMConfig:
     model: str = "gpt-4o-mini"
     temperature: float = 0.2 #낮을수록  RAG 답변이 더 사실적이고 일관되게 나옴 (0.0~1.0)
-    max_tokens: int = 300
+    max_tokens: int = 150  # TTS용: 짧고 명확하게 (150 ≈ 2~3문장)
 
 
 class OpenAILLM:
@@ -30,9 +30,10 @@ class OpenAILLM:
         )
 
         system_prompt = (
-            "당신은 관광 안내 전문가입니다.\n"
-            "사용자의 질문에 대해 제공된 문서 정보(context)를 바탕으로만 정확하고 친절하게 답변하세요.\n"
-            "정보가 없으면 '관련 정보를 찾을 수 없습니다'라고 답하세요."
+            "당신은 관광 안내 음성 도우미입니다.\n"
+            "제공된 정보(context)만 근거로, 2~5문장으로 짧고 자연스럽게 답하세요.\n"
+            "불필요한 설명이나 나열은 하지 마세요.\n"
+            "정보가 없으면 '관련 정보를 찾을 수 없습니다'라고만 답하세요."
         )
 
         user_message = (
