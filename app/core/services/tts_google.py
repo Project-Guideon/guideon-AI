@@ -13,7 +13,7 @@ class TTSConfig:
     speaking_rate: float = 1.0
     pitch: float = 0.0
     audio_encoding: texttospeech.AudioEncoding = texttospeech.AudioEncoding.MP3
-
+    #input은  wav, output은 mp3
 
 class GoogleTTS:
     def __init__(self, config: Optional[TTSConfig] = None):

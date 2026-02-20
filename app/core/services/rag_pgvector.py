@@ -1,7 +1,7 @@
 # services/rag_pgvector.py
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 from sentence_transformers import SentenceTransformer
 from app.core.DB.connect_db import get_conn
@@ -13,33 +13,37 @@ class RetrievedChunk:
     doc_id: int
     content: str
     metadata: Dict[str, Any]
+    similarity: float = 0.0          # 1 - cosine distance (높을수록 유사)
 
 
 class PgVectorRAG:
-    def __init__(self, model_name: str = "all-mpnet-base-v2"):
+    # PDF2db2.py와 동일한 모델 필수 (저장 벡터 공간 일치)
+    def __init__(self, model_name: str = "paraphrase-multilingual-mpnet-base-v2"):
         self.model_name = model_name
         self.model = SentenceTransformer(self.model_name)
 
     def retrieve(self, query: str, site_id: int = 1, k: int = 5) -> List[RetrievedChunk]:
-        q_emb = self.model.encode(query).tolist()
+        q_emb = self.model.encode(query, normalize_embeddings=True).tolist()
 
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT chunk_id, doc_id, content, metadata
+                    SELECT chunk_id, doc_id, content, metadata,
+                           1 - (embedding <=> %s::vector) AS similarity
                     FROM tb_doc_chunk
                     WHERE site_id = %s
-                    ORDER BY embedding <=> %s::vector
+                    ORDER BY embedding <=> %s::vector 
                     LIMIT %s
                     """,
-                    (site_id, q_emb, k),
+                    #order by 오름차순으로 하면 맨 앞에 제일 작은것이 나옴 =>작을수록 가장 유사한것
+                    (q_emb, site_id, q_emb, k),
                 )
-                rows: List[Tuple[int, int, str, Any]] = cur.fetchall()
+                #output: chunk_id, doc_id, content, metadata, similarity
+                rows = cur.fetchall()
 
         chunks: List[RetrievedChunk] = []
-        for chunk_id, doc_id, content, meta in rows:
-            # meta가 JSONB면 파이썬 dict로 오거나 문자열로 올 수 있어서 안전 처리
+        for chunk_id, doc_id, content, meta, similarity in rows:
             if meta is None:
                 meta = {}
             chunks.append(
@@ -48,6 +52,7 @@ class PgVectorRAG:
                     doc_id=doc_id,
                     content=content,
                     metadata=meta if isinstance(meta, dict) else {"raw": meta},
+                    similarity=round(float(similarity), 4),
                 )
             )
 

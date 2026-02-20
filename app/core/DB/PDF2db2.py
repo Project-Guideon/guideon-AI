@@ -163,7 +163,7 @@ def ingest_pdf(
                 )
 
             for idx, chunk in enumerate(chunks):
-                emb = model.encode(chunk).tolist()
+                emb = model.encode(chunk, normalize_embeddings=True).tolist()
                 meta = {
                     "chunk_index": idx,
                     "chunk_size": chunk_size,

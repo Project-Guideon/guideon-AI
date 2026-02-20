@@ -25,14 +25,15 @@ class VoicePipeline:
         self.tts = tts
 
     def run(self, audio_bytes: bytes, site_id: int = 1, k: int = 5) -> VoiceQAResult:
-        query = self.stt.transcribe(audio_bytes)
+        query = self.stt.transcribe(audio_bytes)#음성데이터(bytes)를 텍스트로 변환
 
         if not query:
             answer = "죄송해요. 음성을 인식하지 못했어요. 다시 말씀해 주세요."
-            voice = self.tts.synthesize(answer)
+            voice = self.tts.synthesize(answer) #텍스트를 음성데이터(bytes)로 변환
             return VoiceQAResult(query="", answer=answer, voice_bytes=voice, contexts=[])
 
-        contexts = self.rag.retrieve(query=query, site_id=site_id, k=k)
+        #아랫부분 langraph호출해서 처리로 바꾸기
+        contexts = self.rag.retrieve(query=query, site_id=site_id, k=k) 
         answer = self.llm.generate(query=query, contexts=contexts)
         voice = self.tts.synthesize(answer)
 
