@@ -1,20 +1,19 @@
+"""
+로컬 테스트용 - 단일 PDF 파일을 직접 DB에 삽입
+실제 API는 PDF2db.py의 create_doc_record + process_pdf_bytes 사용
+"""
 import hashlib
-import re
 from pathlib import Path
-from typing import List, Dict, Any
 
 import pdfplumber
-from sentence_transformers import SentenceTransformer
 from psycopg.types.json import Jsonb
 
 from app.core.DB.connect_db import get_conn
+from app.core.DB.PDF2db import clean_pdf_text, chunk_text, MODEL_NAME, model
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]  # app/core
 DATA_DIR = BASE_DIR / "data"
-
-MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"  # 768 dim (다국어, 한국어 최적화)
-model = SentenceTransformer(MODEL_NAME)
 
 
 def sha256_file(p: Path) -> str:
@@ -33,74 +32,6 @@ def read_pdf_text(pdf_path: Path, x_tol: float = 2, y_tol: float = 2) -> str:
             t = page.extract_text(x_tolerance=x_tol, y_tolerance=y_tol) or ""
             texts.append(f"\n\n--- page {i+1} ---\n{t}")
     return "".join(texts).strip()
-
-
-def clean_pdf_text(text: str) -> str:
-    """PDF 추출 텍스트 정리 (줄바꿈/공백/빈줄)"""
-    if not text:
-        return ""
-
-    text = text.replace("\r", "\n")
-    text = re.sub(r"[ \t]+\n", "\n", text)   # 줄 끝 공백 제거
-    text = re.sub(r"\n{3,}", "\n\n", text)   # 과도한 빈줄 축소
-
-    # 페이지 헤더는 유지하면서 본문 단일 줄바꿈은 공백으로 (문장 끊김 완화)
-    parts = text.split("\n\n--- page ")
-    if len(parts) > 1:
-        head = parts[0]
-        pages = []
-        for p in parts[1:]:
-            idx = p.find("---\n")
-            if idx == -1:
-                pages.append(p)
-                continue
-            page_header = p[:idx + 4]      # "N ---"
-            page_body = p[idx + 4:]
-
-            page_body = re.sub(r"(?<!\n)\n(?!\n)", " ", page_body)  # 단일 줄바꿈 -> 공백
-            page_body = re.sub(r"[ \t]{2,}", " ", page_body)        # 다중 공백 축소
-
-            pages.append(page_header + page_body)
-
-        text = head + "\n\n--- page " + "\n\n--- page ".join(pages)
-    else:
-        text = re.sub(r"(?<!\n)\n(?!\n)", " ", text)
-        text = re.sub(r"[ \t]{2,}", " ", text)
-
-    return text.strip()
-
-
-def chunk_text(text: str, chunk_size: int = 900, chunk_overlap: int = 150) -> List[str]:
-    """
-    문단 기반 chunking: 빈줄(\n\n) 기준으로 합치면서 chunk_size 맞추기
-    """
-    if not text:
-        return []
-
-    paras = [p.strip() for p in text.split("\n\n") if p.strip()]
-    chunks: List[str] = []
-    cur = ""
-
-    for p in paras:
-        if not cur:
-            cur = p
-            continue
-
-        if len(cur) + 2 + len(p) <= chunk_size:
-            cur += "\n\n" + p
-        else:
-            chunks.append(cur)
-
-            if chunk_overlap > 0 and len(cur) > chunk_overlap:
-                tail = cur[-chunk_overlap:]
-                cur = tail + "\n\n" + p
-            else:
-                cur = p
-
-    if cur:
-        chunks.append(cur)
-
-    return chunks
 
 
 def ingest_pdf(
@@ -132,30 +63,28 @@ def ingest_pdf(
     # 4) DB insert
     with get_conn() as conn:
         with conn.cursor() as cur:
-            # tb_document에 먼저 INSERT (문서 메타데이터)
             cur.execute(
                 """
-                INSERT INTO tb_document 
-                (site_id, original_name, storage_url, file_hash, 
+                INSERT INTO tb_document
+                (site_id, original_name, storage_url, file_hash,
                  chunk_size, chunk_overlap, embedding_model, status)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING doc_id
                 """,
                 (
                     site_id,
-                    pdf_path.name,  # original_name
+                    pdf_path.name,
                     "",  # storage_url (S3 URL은 백엔드에서 받아야 함)
                     file_hash,
                     chunk_size,
                     chunk_overlap,
                     MODEL_NAME,
-                    "PROCESSING",  # 시작: PROCESSING
+                    "PROCESSING",
                 ),
             )
             doc_id = cur.fetchone()[0]
             print(f"Document created: doc_id={doc_id}")
 
-            # tb_doc_chunk에 청크들 INSERT
             if reset:
                 cur.execute(
                     "DELETE FROM tb_doc_chunk WHERE doc_id = %s",
@@ -173,24 +102,16 @@ def ingest_pdf(
                 }
                 cur.execute(
                     """
-                    INSERT INTO tb_doc_chunk 
+                    INSERT INTO tb_doc_chunk
                     (site_id, doc_id, chunk_index, content, metadata, embedding)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
-                    (
-                        site_id,
-                        doc_id,
-                        idx,
-                        chunk,
-                        Jsonb(meta),
-                        emb,
-                    ),
+                    (site_id, doc_id, idx, chunk, Jsonb(meta), emb),
                 )
 
-            # 문서 처리 완료: status를 COMPLETED로 변경
             cur.execute(
                 """
-                UPDATE tb_document 
+                UPDATE tb_document
                 SET status = %s, processed_at = NOW()
                 WHERE doc_id = %s
                 """,
