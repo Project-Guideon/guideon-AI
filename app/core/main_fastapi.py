@@ -104,7 +104,6 @@ async def upload_document(
         file_size=len(pdf_bytes),
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        purge_old_chunks=purge_old_chunks,
     )
 
     # 즉시 응답 후 백그라운드에서 청킹/임베딩/저장 처리

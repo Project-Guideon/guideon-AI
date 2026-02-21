@@ -84,7 +84,6 @@ def create_doc_record(
     file_size: int,
     chunk_size: int,
     chunk_overlap: int,
-    purge_old_chunks: bool = True,
 ) -> int:
     """
     API가 즉시 doc_id를 반환하기 위해 먼저 PENDING 상태로 레코드 생성.
@@ -96,12 +95,12 @@ def create_doc_record(
                 """
                 INSERT INTO tb_document
                 (site_id, original_name, storage_url, file_hash, file_size,
-                 chunk_size, chunk_overlap, embedding_model, status, purge_old_chunks)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'PENDING', %s)
+                 chunk_size, chunk_overlap, embedding_model, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'PENDING')
                 RETURNING doc_id
                 """,
                 (site_id, original_name, "", file_hash, file_size,
-                 chunk_size, chunk_overlap, MODEL_NAME, purge_old_chunks),
+                 chunk_size, chunk_overlap, MODEL_NAME),
             )
             # storage_url은 백엔드에서 받아야 함 (S3 URL) => 우선 ""로 넣어둠
             doc_id = cur.fetchone()[0]
