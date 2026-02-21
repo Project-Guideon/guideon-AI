@@ -20,6 +20,17 @@ class OpenAILLM:
         self.cfg = cfg or LLMConfig()
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+    def chat(self, messages: list, max_tokens: int = None) -> str:
+        """범용 LLM 호출 — messages 리스트를 그대로 받는다.
+        노드별(intent_gate, translate, query_rewrite 등)로 직접 사용."""
+        response = self.client.chat.completions.create(
+            model=self.cfg.model,
+            messages=messages,
+            temperature=self.cfg.temperature,
+            max_tokens=max_tokens or self.cfg.max_tokens,
+        )
+        return response.choices[0].message.content.strip()
+
     def generate(self, query: str, contexts: List[RetrievedChunk]) -> str:
         #query는 stt로 만들어진 질문 텍스트, contexts는 rag로 검색된 관련 정보 리스트
         if not contexts:

@@ -1,52 +1,50 @@
 # ===============================
 # Core API / Server
 # ===============================
-fastapi>=0.110,<1.0
-uvicorn[standard]>=0.27,<1.0 # standard 옵션에 websocket 지원해줌
-httpx>=0.26,<1.0 # FastAPI → SpringBoot 로 비동기 HTTP 요청 보낼 때 사용
+fastapi>=0.128,<1.0
+uvicorn[standard]>=0.40,<1.0
+httpx>=0.28,<1.0
+python-multipart>=0.0.22,<1.0
 
 # ===============================
 # Config / Env
 # ===============================
-pydantic>=2.5,<3.0 # 타입 체크 + 자동 검증, JSON ↔ Python 변환시 사용
-pydantic-settings>=2.1,<3.0 # .env를 객체처럼 사용 가능
-python-dotenv>=1.0,<2.0 # .env파일을 자동으로 환경변수로 로드
+pydantic>=2.12,<3.0
+pydantic-settings>=2.12,<3.0
+python-dotenv>=1.2,<2.0
 
 # ===============================
 # Audio Processing (STT/TTS common)
 # ===============================
-numpy>=1.24,<2.0
-soundfile>=0.12,<1.0 # wav 같은 오디오 파일
-librosa>=0.10,<1.0 # 음성 파일을 ML/STT가 먹기 좋게 손질해주는 도구
+numpy>=1.26,<2.0
+soundfile>=0.13,<1.0
+librosa>=0.11,<1.0
 
 # ===============================
 # Google Cloud (STT / TTS)
 # ===============================
-google-cloud-speech>=2.23,<3.0 # Google Speech-to-Text API 클라이언트
-google-cloud-texttospeech>=2.16,<3.0 # 텍스트 → 음성(mp3/wav)
-google-auth>=2.25,<3.0 # Google Cloud 인증 담당
+google-cloud-speech>=2.36,<3.0
+google-cloud-texttospeech>=2.34,<3.0
+google-auth>=2.47,<3.0
 
 # ===============================
-# RAG
+# LangGraph / RAG
 # ===============================
-langchain>=0.1,<0.3 # RAG 전체 파이프라인 관리
-langchain-community>=0.0.20,<0.3 # 랭체인 로더
-sentence-transformers>=2.2,<3.0 # 문장 임베딩
-faiss-cpu>=1.7,<2.0 # 벡터 저장
-pypdf>=4.0,<5.0 # pdf 로더
-pdfplumber>=0.10,<1.0 # PDF에서 텍스트 추출
-openai>=1.0,<2.0 # OpenAI GPT API (RAG 답변 생성)
+langgraph>=1.0,<2.0
+langchain>=1.2,<2.0
+langchain-community>=0.4,<1.0
+sentence-transformers>=2.7,<3.0
+pypdf>=4.3,<5.0
+pdfplumber>=0.11,<1.0
+openai>=2.17,<3.0
 
 # ===============================
-# Database (Postgres / pgvector)
+# Vector DB / Postgres
 # ===============================
-psycopg[binary]>=3.1,<4.0 # Python → Postgres 연결 드라이버
-pgvector>=0.2,<1.0 # Postgres에서 벡터 검색(RAG)할 때 필요
+psycopg[binary]>=3.3,<4.0
+pgvector>=0.4,<1.0
 
 # ===============================
-# redis 파이썬 부분도 필요한가????
+# Optional (로컬 FAISS 쓸 때만)
 # ===============================
- redis>=5.0,<6.0
- 
- 
- python-multipart==0.0.22
+faiss-cpu>=1.13,<2.0

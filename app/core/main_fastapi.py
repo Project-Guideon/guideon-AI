@@ -22,7 +22,7 @@ load_dotenv()
 
 app = FastAPI(title="Guideon Voice QA")
 
-stt = GoogleSTT(STTConfig(language_code="ko-KR", sample_rate_hz=16000))
+stt = GoogleSTT(STTConfig(primary_language="ko-KR", sample_rate_hz=16000))
 tts = GoogleTTS(TTSConfig(language_code="ko-KR"))
 rag = PgVectorRAG(model_name="paraphrase-multilingual-mpnet-base-v2")
 llm = OpenAILLM(LLMConfig(model="gpt-4o-mini", temperature=0.7, max_tokens=500))
@@ -41,9 +41,9 @@ def root():
 
 
 @app.post("/voice_qa")
-async def voice_qa(audio: UploadFile = File(...), site_id: int = 1, k: int = 5):
+async def voice_qa(audio: UploadFile = File(...), site_id: int = 1):
     audio_bytes = await audio.read()
-    result = pipeline.run(audio_bytes, site_id=site_id, k=k)
+    result = pipeline.run(audio_bytes, site_id=site_id)
 
     return Response(
         content=result.voice_bytes,
@@ -70,7 +70,7 @@ async def upload_document(
 ):
     pdf_bytes = await file.read()
     file_hash = hashlib.sha256(pdf_bytes).hexdigest()
-    original_name = file.filename
+    original_name = file.filename or "unknown"
     created_at = datetime.now(timezone.utc).isoformat()
 
     # 409: 동일 site에 같은 파일(해시) 중복 업로드 체크

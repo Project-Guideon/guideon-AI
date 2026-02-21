@@ -1,0 +1,12 @@
+{
+  "executionEnvironments": [
+    {
+      "root": "."
+    }
+  ],
+  "venvPath": ".",
+  "venv": ".guideon_AI",
+  "extraPaths": [
+    "."
+  ]
+}
