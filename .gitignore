@@ -16,3 +16,7 @@ google_key.json
 
 # documentation
 .guide_on 로컬 실행방법.txt
+
+# audio files
+*.wav
+*.mp3
