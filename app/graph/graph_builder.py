@@ -34,6 +34,81 @@ from app.graph.routers.infotype_router import infotype_router
 from app.graph.routers.answer_check_router import answer_check_router
 
 
+def build_text_graph(rag: PgVectorRAG, llm: OpenAILLM):
+    """STT/TTS 없이 텍스트 입출력만 처리하는 LangGraph 그래프."""
+    builder = StateGraph(GraphState)
+
+    builder.add_node("normalize",       normalize_node)
+    builder.add_node("intent_gate",     make_intent_gate_node(llm))
+    builder.add_node("infotype_gate",   make_infotype_gate_node(llm))
+    builder.add_node("smalltalk",       make_smalltalk_node(llm))
+    builder.add_node("map_tool",        map_tool_node)
+    builder.add_node("struct_db",       struct_db_node)
+    builder.add_node("direct_llm",      make_direct_llm_node(llm))
+    builder.add_node("answer_compose",  make_answer_compose_node(llm))
+    builder.add_node("translate_ko",    make_translate_node(llm))
+    builder.add_node("query_rewrite",   make_query_rewrite_node(llm))
+    builder.add_node("retrieve",        make_retrieve_node(rag))
+    builder.add_node("context_pack",    context_pack_node)
+    builder.add_node("answer_generate", make_answer_generate_node(llm))
+    builder.add_node("answer_check",    answer_check_node)
+    builder.add_node("clarify",         make_clarify_node(llm))
+
+    # stt 건너뛰고 normalize 가 진입점
+    builder.set_entry_point("normalize")
+
+    builder.add_edge("normalize",      "intent_gate")
+
+    builder.add_edge("map_tool",       "answer_compose")
+    builder.add_edge("struct_db",      "answer_compose")
+    builder.add_edge("answer_compose", END)
+
+    # tts_builder 대신 END 로 직결
+    builder.add_edge("smalltalk",      END)
+    builder.add_edge("direct_llm",     END)
+
+    builder.add_edge("translate_ko",   "query_rewrite")
+    builder.add_edge("query_rewrite",  "retrieve")
+    builder.add_edge("retrieve",       "context_pack")
+    builder.add_edge("context_pack",   "answer_generate")
+    builder.add_edge("answer_generate","answer_check")
+
+    builder.add_edge("clarify",        END)
+
+    builder.add_conditional_edges(
+        "intent_gate",
+        intent_router,
+        {
+            "smalltalk":    "smalltalk",
+            "info_request": "infotype_gate",
+        },
+    )
+
+    builder.add_conditional_edges(
+        "infotype_gate",
+        infotype_router,
+        {
+            "map_tool":      "map_tool",
+            "struct_db":     "struct_db",
+            "direct_llm":    "direct_llm",
+            "query_rewrite": "query_rewrite",
+            "translate_ko":  "translate_ko",
+        },
+    )
+
+    builder.add_conditional_edges(
+        "answer_check",
+        answer_check_router,
+        {
+            "good":  END,        # tts_builder 대신 바로 종료
+            "retry": "retrieve",
+            "bad":   "clarify",
+        },
+    )
+
+    return builder.compile()
+
+
 def build_graph(stt: GoogleSTT, rag: PgVectorRAG, llm: OpenAILLM, tts: GoogleTTS):
     """모든 노드와 엣지를 연결해서 LangGraph 실행 그래프를 빌드한다.
 

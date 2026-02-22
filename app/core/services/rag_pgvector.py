@@ -68,6 +68,7 @@ class PgVectorRAG:
             chunks     : List[RetrievedChunk]
             chunk_embs : List[np.ndarray]  — 각 청크의 저장 임베딩
         """
+        import json
         import numpy as np
 
         # np.array()로 명시적 변환 → pyright 타입 오류 방지
@@ -106,7 +107,9 @@ class PgVectorRAG:
                     similarity=round(float(similarity), 4),
                 )
             )
-            # pgvector 는 embedding 을 list 로 반환 → np.ndarray 로 변환
+            # pgvector 드라이버에 따라 string 으로 반환될 수 있으므로 파싱
+            if isinstance(embedding, str):
+                embedding = json.loads(embedding)
             chunk_embs.append(np.array(embedding, dtype=np.float32))
 
         return q_emb, chunks, chunk_embs

@@ -7,7 +7,7 @@ from app.core.services.llm_openai import OpenAILLM
 from app.core.services.rag_pgvector import PgVectorRAG
 from app.core.services.stt_google import GoogleSTT
 from app.core.services.tts_google import GoogleTTS
-from app.graph.graph_builder import build_graph
+from app.graph.graph_builder import build_graph, build_text_graph
 
 
 @dataclass
@@ -17,6 +17,37 @@ class VoiceQAResult:
     voice_bytes: bytes
     contexts: List[Dict[str, Any]] = field(default_factory=list)
     trace: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class TextQAResult:
+    query: str
+    answer: str
+    contexts: List[Dict[str, Any]] = field(default_factory=list)
+    trace: Dict[str, Any] = field(default_factory=dict)
+
+
+class TextPipeline:
+    def __init__(self, rag: PgVectorRAG, llm: OpenAILLM):
+        self.graph = build_text_graph(rag=rag, llm=llm)
+
+    def run(self, query: str, site_id: int = 1, language_code: str = "ko") -> TextQAResult:
+        initial_state = {
+            "transcript": query,        # STT 결과 대신 텍스트를 직접 주입
+            "language_code": language_code,
+            "user_language": language_code,
+            "site_id": site_id,
+            "top_k": 5,
+            "retry_count": 0,
+            "trace": {},
+        }
+        result = self.graph.invoke(initial_state)
+        return TextQAResult(
+            query=query,
+            answer=result.get("answer_text", ""),
+            contexts=result.get("retrieved_chunks", []),
+            trace=result.get("trace", {}),
+        )
 
 
 class VoicePipeline:

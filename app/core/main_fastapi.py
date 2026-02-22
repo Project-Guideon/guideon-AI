@@ -13,7 +13,7 @@ from app.core.services.stt_google import GoogleSTT, STTConfig
 from app.core.services.tts_google import GoogleTTS, TTSConfig
 from app.core.services.rag_pgvector import PgVectorRAG
 from app.core.services.llm_openai import OpenAILLM, LLMConfig
-from app.core.services.pipeline import VoicePipeline
+from app.core.services.pipeline import VoicePipeline, TextPipeline
 from app.core.DB.PDF2db import create_doc_record, process_pdf_bytes
 from app.core.DB.connect_db import get_conn
 
@@ -28,6 +28,7 @@ rag = PgVectorRAG(model_name="paraphrase-multilingual-mpnet-base-v2")
 llm = OpenAILLM(LLMConfig(model="gpt-4o-mini", temperature=0.7, max_tokens=500))
 
 pipeline = VoicePipeline(stt=stt, rag=rag, llm=llm, tts=tts)
+text_pipeline = TextPipeline(rag=rag, llm=llm)
 
 
 @app.get("/health")
@@ -52,11 +53,10 @@ async def voice_qa(audio: UploadFile = File(...), site_id: int = 1):
     )
 
 
-@app.post("/text_qa") # 텍스트로 들어왔을때 택스트 답변 과정 사용할지 안할지는 미정
-async def text_qa(query: str, site_id: int = 1, k: int = 5):
-    contexts = rag.retrieve(query=query, site_id=site_id, k=k)
-    answer = llm.generate(query=query, contexts=contexts)
-    return JSONResponse({"query": query, "answer": answer})
+@app.post("/text_qa")
+async def text_qa(query: str, site_id: int = 1, language_code: str = "ko"):
+    result = text_pipeline.run(query=query, site_id=site_id, language_code=language_code)
+    return JSONResponse({"query": result.query, "answer": result.answer})
 
 
 @app.post("/sites/{site_id}/documents/upload")
