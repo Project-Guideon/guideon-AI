@@ -6,7 +6,7 @@ from typing import List
 
 from openai import OpenAI
 from app.core.services.rag_pgvector import RetrievedChunk
-
+from langsmith.wrappers import wrap_openai
 
 @dataclass
 class LLMConfig:
@@ -18,7 +18,8 @@ class LLMConfig:
 class OpenAILLM:
     def __init__(self, cfg: LLMConfig = None):
         self.cfg = cfg or LLMConfig()
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        base_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.client = wrap_openai(base_client)
 
     def chat(self, messages: list, max_tokens: int = None) -> str:
         """범용 LLM 호출 — messages 리스트를 그대로 받는다.

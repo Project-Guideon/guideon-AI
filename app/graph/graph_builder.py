@@ -20,7 +20,7 @@ from app.graph.nodes.struct_db_node import struct_db_node
 from app.graph.nodes.direct_llm_node import make_direct_llm_node
 from app.graph.nodes.answer_compose import make_answer_compose_node
 from app.graph.nodes.translate_node import make_translate_node
-from app.graph.nodes.query_rewrite import make_query_rewrite_node
+#from app.graph.nodes.query_rewrite import make_query_rewrite_node
 from app.graph.nodes.retrieve_node import make_retrieve_node
 from app.graph.nodes.context_pack import context_pack_node
 from app.graph.nodes.answer_generate import make_answer_generate_node
@@ -47,7 +47,7 @@ def build_text_graph(rag: PgVectorRAG, llm: OpenAILLM):
     builder.add_node("direct_llm",      make_direct_llm_node(llm))
     builder.add_node("answer_compose",  make_answer_compose_node(llm))
     builder.add_node("translate_ko",    make_translate_node(llm))
-    builder.add_node("query_rewrite",   make_query_rewrite_node(llm))
+    #builder.add_node("query_rewrite",   make_query_rewrite_node(llm))
     builder.add_node("retrieve",        make_retrieve_node(rag))
     builder.add_node("context_pack",    context_pack_node)
     builder.add_node("answer_generate", make_answer_generate_node(llm))
@@ -67,8 +67,10 @@ def build_text_graph(rag: PgVectorRAG, llm: OpenAILLM):
     builder.add_edge("smalltalk",      END)
     builder.add_edge("direct_llm",     END)
 
-    builder.add_edge("translate_ko",   "query_rewrite")
-    builder.add_edge("query_rewrite",  "retrieve")
+    #builder.add_edge("translate_ko",   "query_rewrite")
+    builder.add_edge("translate_ko", "retrieve")
+    #builder.add_edge("query_rewrite",  "retrieve")
+    
     builder.add_edge("retrieve",       "context_pack")
     builder.add_edge("context_pack",   "answer_generate")
     builder.add_edge("answer_generate","answer_check")
@@ -91,7 +93,8 @@ def build_text_graph(rag: PgVectorRAG, llm: OpenAILLM):
             "map_tool":      "map_tool",
             "struct_db":     "struct_db",
             "direct_llm":    "direct_llm",
-            "query_rewrite": "query_rewrite",
+            #"query_rewrite": "query_rewrite",
+            "query_rewrite":  "retrieve",
             "translate_ko":  "translate_ko",
         },
     )
@@ -128,7 +131,7 @@ def build_graph(stt: GoogleSTT, rag: PgVectorRAG, llm: OpenAILLM, tts: GoogleTTS
     builder.add_node("direct_llm",      make_direct_llm_node(llm))
     builder.add_node("answer_compose",  make_answer_compose_node(llm))
     builder.add_node("translate_ko",    make_translate_node(llm))
-    builder.add_node("query_rewrite",   make_query_rewrite_node(llm))
+    #builder.add_node("query_rewrite",   make_query_rewrite_node(llm))
     builder.add_node("retrieve",        make_retrieve_node(rag))
     builder.add_node("context_pack",    context_pack_node)
     builder.add_node("answer_generate", make_answer_generate_node(llm))
@@ -154,10 +157,10 @@ def build_graph(stt: GoogleSTT, rag: PgVectorRAG, llm: OpenAILLM, tts: GoogleTTS
 
     # Foreign RAG: translate_ko → query_rewrite
     # KO RAG:      infotype_router 가 직접 query_rewrite 로 보냄
-    builder.add_edge("translate_ko",   "query_rewrite")
-
+    #builder.add_edge("translate_ko",   "query_rewrite")
+    builder.add_edge("translate_ko", "retrieve")
     # RAG 파이프라인 고정 구간
-    builder.add_edge("query_rewrite",  "retrieve")
+    #builder.add_edge("query_rewrite",  "retrieve")
     builder.add_edge("retrieve",       "context_pack")
     builder.add_edge("context_pack",   "answer_generate")
     builder.add_edge("answer_generate","answer_check")
@@ -183,7 +186,8 @@ def build_graph(stt: GoogleSTT, rag: PgVectorRAG, llm: OpenAILLM, tts: GoogleTTS
             "map_tool":      "map_tool",
             "struct_db":     "struct_db",
             "direct_llm":    "direct_llm",
-            "query_rewrite": "query_rewrite",   # KO RAG 경로
+            #"query_rewrite": "query_rewrite",   # KO RAG 경로
+            "query_rewrite":  "retrieve",
             "translate_ko":  "translate_ko",    # Foreign RAG 경로
         },
     )

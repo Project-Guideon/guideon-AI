@@ -8,7 +8,7 @@ from app.core.services.rag_pgvector import PgVectorRAG
 from app.core.services.stt_google import GoogleSTT
 from app.core.services.tts_google import GoogleTTS
 from app.graph.graph_builder import build_graph, build_text_graph
-
+from app.core.services.rag_pgvector import OpenAIEmbedder
 
 @dataclass
 class VoiceQAResult:

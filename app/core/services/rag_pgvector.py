@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 from app.core.DB.connect_db import get_conn
 
 
@@ -15,15 +15,22 @@ class RetrievedChunk:
     metadata: Dict[str, Any]
     similarity: float = 0.0          # 1 - cosine distance (높을수록 유사)
 
+class OpenAIEmbedder:
+    def __init__(self, client, model="text-embedding-3-small"):
+        self.client = client
+        self.model = model
 
+    def embed(self, text: str) -> List[float]:
+        resp = self.client.embeddings.create(model=self.model, input=text)
+        return resp.data[0].embedding  # length = 1536
+    
 class PgVectorRAG:
     # PDF2db2.py와 동일한 모델 필수 (저장 벡터 공간 일치)
-    def __init__(self, model_name: str = "paraphrase-multilingual-mpnet-base-v2"):
-        self.model_name = model_name
-        self.model = SentenceTransformer(self.model_name)
+    def __init__(self, embedder: OpenAIEmbedder):
+        self.embedder = embedder
 
     def retrieve(self, query: str, site_id: int = 1, k: int = 5) -> List[RetrievedChunk]:
-        q_emb = self.model.encode(query, normalize_embeddings=True).tolist()
+        q_emb = self.embedder.embed(query)
 
         with get_conn() as conn:
             with conn.cursor() as cur:
@@ -72,9 +79,11 @@ class PgVectorRAG:
         import numpy as np
 
         # np.array()로 명시적 변환 → pyright 타입 오류 방지
-        q_emb: np.ndarray = np.array(
+        ''' q_emb: np.ndarray = np.array(
             self.model.encode(query, normalize_embeddings=True), dtype=np.float32
-        )
+        )'''
+        q_emb_list = self.embedder.embed(query)     # List[float] length 1536
+        q_emb = np.array(q_emb_list, dtype=np.float32)
 
         with get_conn() as conn:
             with conn.cursor() as cur:

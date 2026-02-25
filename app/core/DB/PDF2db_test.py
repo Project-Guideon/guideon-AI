@@ -9,7 +9,7 @@ import pdfplumber
 from psycopg.types.json import Jsonb
 
 from app.core.DB.connect_db import get_conn
-from app.core.DB.PDF2db import clean_pdf_text, chunk_text, MODEL_NAME, model
+from app.core.DB.PDF2db import clean_pdf_text, chunk_text, MODEL_NAME, client
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]  # app/core
@@ -92,7 +92,10 @@ def ingest_pdf(
                 )
 
             for idx, chunk in enumerate(chunks):
-                emb = model.encode(chunk, normalize_embeddings=True).tolist()
+                emb = client.embeddings.create(
+                    model=MODEL_NAME,
+                    input=chunk
+                ).data[0].embedding
                 meta = {
                     "chunk_index": idx,
                     "chunk_size": chunk_size,
@@ -125,4 +128,4 @@ def ingest_pdf(
 
 if __name__ == "__main__":
     # site_id=1로 테스트 (실제로는 백엔드에서 받아야 함)
-    ingest_pdf("경복궁가이드pdf.pdf", site_id=1, reset=True)
+    ingest_pdf("경복궁2.pdf", site_id=1, reset=True)

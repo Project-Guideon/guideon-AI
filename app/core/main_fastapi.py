@@ -16,15 +16,19 @@ from app.core.services.llm_openai import OpenAILLM, LLMConfig
 from app.core.services.pipeline import VoicePipeline, TextPipeline
 from app.core.DB.PDF2db import create_doc_record, process_pdf_bytes
 from app.core.DB.connect_db import get_conn
-
+from openai import OpenAI
+from app.core.services.rag_pgvector import OpenAIEmbedder
+import os
+from langsmith import traceable
 
 load_dotenv()
 
 app = FastAPI(title="Guideon Voice QA")
-
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 stt = GoogleSTT(STTConfig(primary_language="ko-KR", sample_rate_hz=16000))
 tts = GoogleTTS(TTSConfig(language_code="ko-KR"))
-rag = PgVectorRAG(model_name="paraphrase-multilingual-mpnet-base-v2")
+embedder = OpenAIEmbedder(client=client, model="text-embedding-3-small")  # 모델은 너가 쓰는 걸로
+rag = PgVectorRAG(embedder=embedder)
 llm = OpenAILLM(LLMConfig(model="gpt-4o-mini", temperature=0.7, max_tokens=500))
 
 pipeline = VoicePipeline(stt=stt, rag=rag, llm=llm, tts=tts)
@@ -53,9 +57,13 @@ async def voice_qa(audio: UploadFile = File(...), site_id: int = 1):
     )
 
 
+@traceable(name="text_qa_pipeline")
+def traced_text_run(query: str, site_id: int, language_code: str):
+    return text_pipeline.run(query=query, site_id=site_id, language_code=language_code)
+
 @app.post("/text_qa")
 async def text_qa(query: str, site_id: int = 1, language_code: str = "ko"):
-    result = text_pipeline.run(query=query, site_id=site_id, language_code=language_code)
+    result = traced_text_run(query, site_id, language_code)
     return JSONResponse({"query": result.query, "answer": result.answer})
 
 

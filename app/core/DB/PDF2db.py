@@ -3,14 +3,17 @@ import re
 from typing import List
 
 import pdfplumber
-from sentence_transformers import SentenceTransformer
+#from sentence_transformers import SentenceTransformer
 from psycopg.types.json import Jsonb
 
 from app.core.DB.connect_db import get_conn
+import os
 
+from openai import OpenAI
 
-MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"  # 768 dim (다국어, 한국어 최적화)
-model = SentenceTransformer(MODEL_NAME)
+MODEL_NAME = "text-embedding-3-small"
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 
 # ── 공용 헬퍼 (PDF2db_test.py에서도 import해서 사용) ──────────────────────────
@@ -152,7 +155,11 @@ def process_pdf_bytes(
                         (doc_id,),
                     )
                 for idx, chunk in enumerate(chunks):
-                    emb = model.encode(chunk, normalize_embeddings=True).tolist()
+                    emb = client.embeddings.create(
+                        model=MODEL_NAME,
+                        input=chunk
+                    ).data[0].embedding
+                    
                     meta = {
                         "chunk_index": idx,
                         "chunk_size": chunk_size,
