@@ -4,6 +4,7 @@ from langgraph.graph import StateGraph, END
 
 from app.core.services.llm_openai import OpenAILLM
 from app.core.services.rag_pgvector import PgVectorRAG
+from app.core.services.rag_pgvector_v2 import PgVectorRAG_V2
 from app.core.services.stt_google import GoogleSTT
 from app.core.services.tts_google import GoogleTTS
 
@@ -22,6 +23,7 @@ from app.graph.nodes.answer_compose import make_answer_compose_node
 from app.graph.nodes.translate_node import make_translate_node
 #from app.graph.nodes.query_rewrite import make_query_rewrite_node
 from app.graph.nodes.retrieve_node import make_retrieve_node
+from app.graph.nodes.retrieve_node_v2 import make_retrieve_node_v2
 from app.graph.nodes.context_pack import context_pack_node
 from app.graph.nodes.answer_generate import make_answer_generate_node
 from app.graph.nodes.answer_check import answer_check_node
@@ -48,7 +50,8 @@ def build_text_graph(rag: PgVectorRAG, llm: OpenAILLM):
     builder.add_node("answer_compose",  make_answer_compose_node(llm))
     builder.add_node("translate_ko",    make_translate_node(llm))
     #builder.add_node("query_rewrite",   make_query_rewrite_node(llm))
-    builder.add_node("retrieve",        make_retrieve_node(rag))
+    _retrieve = make_retrieve_node_v2(rag) if isinstance(rag, PgVectorRAG_V2) else make_retrieve_node(rag)
+    builder.add_node("retrieve",        _retrieve)
     builder.add_node("context_pack",    context_pack_node)
     builder.add_node("answer_generate", make_answer_generate_node(llm))
     builder.add_node("answer_check",    answer_check_node)
@@ -132,7 +135,8 @@ def build_graph(stt: GoogleSTT, rag: PgVectorRAG, llm: OpenAILLM, tts: GoogleTTS
     builder.add_node("answer_compose",  make_answer_compose_node(llm))
     builder.add_node("translate_ko",    make_translate_node(llm))
     #builder.add_node("query_rewrite",   make_query_rewrite_node(llm))
-    builder.add_node("retrieve",        make_retrieve_node(rag))
+    _retrieve = make_retrieve_node_v2(rag) if isinstance(rag, PgVectorRAG_V2) else make_retrieve_node(rag)
+    builder.add_node("retrieve",        _retrieve)
     builder.add_node("context_pack",    context_pack_node)
     builder.add_node("answer_generate", make_answer_generate_node(llm))
     builder.add_node("answer_check",    answer_check_node)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.graph.state import GraphState
 
-_SIMILARITY_THRESHOLD = 0.4   # 최상위 청크 유사도가 이 값 미만이면 bad
+_SIMILARITY_THRESHOLD = 0.2   # 최상위 청크 유사도가 이 값 미만이면 bad
 _MIN_ANSWER_LENGTH = 10       # 답변이 이 글자 수 미만이면 bad
 _MAX_RETRY = 2                # 최대 재시도 횟수
 _TOP_K_RETRY = 10             # 재시도 시 top_k
