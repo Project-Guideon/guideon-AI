@@ -279,20 +279,23 @@ def process_pdf_bytes_v2(
         )
         print(f"[PDF-v2] doc_id={doc_id} | 섹션 수={len(sections)}")
 
-        # 3) DB 저장
+        # 3-a) PROCESSING 상태 즉시 커밋 (폴링 시 반영되도록)
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE tb_document SET status = 'PROCESSING' WHERE doc_id = %s",
                     (doc_id,),
                 )
-
                 if purge_old_chunks:
                     cur.execute(
                         "DELETE FROM tb_doc_chunk_v2 WHERE doc_id = %s",
                         (doc_id,),
                     )
+            conn.commit()
 
+        # 3-b) 청킹/임베딩/저장
+        with get_conn() as conn:
+            with conn.cursor() as cur:
                 for idx, sec in enumerate(sections):
                     content = sec["content"]
                     section_title = sec["section_title"]
