@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS tb_doc_chunk (
   content      TEXT NOT NULL,
   metadata     JSONB NULL,
 
-  embedding    vector(768) NULL,
+  embedding    vector(1536) NULL,
 
   content_tsv  TSVECTOR GENERATED ALWAYS AS (
     to_tsvector('simple', coalesce(content, ''))
