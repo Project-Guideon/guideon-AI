@@ -32,10 +32,11 @@ class TextPipeline:
         self.graph = build_text_graph(rag=rag, llm=llm)
 
     def run(self, query: str, site_id: int = 1, language_code: str = "ko") -> TextQAResult:
+        lang2 = language_code.split("-")[0].lower()  # "ko-KR" → "ko"
         initial_state = {
             "transcript": query,        # STT 결과 대신 텍스트를 직접 주입
-            "language_code": language_code,
-            "user_language": language_code,
+            "language_code": lang2,
+            "user_language": lang2,
             "site_id": site_id,
             "top_k": 5,
             "retry_count": 0,

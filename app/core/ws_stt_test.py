@@ -4,7 +4,7 @@ import soundfile as sf
 import websockets
 
 WS_URL = "ws://127.0.0.1:8000/ws/stream"
-WAV_PATH = "input1.wav"   # 너 녹음 파일 경로
+WAV_PATH = "input2.wav"   # 너 녹음 파일 경로
 CHUNK_MS = 50             # 20~100ms 추천
 
 def to_pcm16_mono_16k(wav_path: str):
@@ -41,6 +41,9 @@ async def main():
                 t = data.get("type")
                 if t in ("stt_interim", "stt_final"):
                     print(f"[{t}] {data.get('text')}")
+                elif t == "done":
+                    print("[recv]", data)
+                    break
                 else:
                     print("[recv]", data)
 
@@ -54,9 +57,8 @@ async def main():
         # 3) stop
         await ws.send(json.dumps({"type": "stop"}))
 
-        # 조금 기다렸다 종료
-        await asyncio.sleep(1.0)
-        recv_task.cancel()
+        # 서버가 done을 보낼 때까지 대기
+        await recv_task
 
 if __name__ == "__main__":
     asyncio.run(main())

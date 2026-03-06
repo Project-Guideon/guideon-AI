@@ -7,12 +7,13 @@ from datetime import datetime, timezone
 import os
 import asyncio
 import json
+import time
 from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response, JSONResponse
 from dotenv import load_dotenv
-from langsmith import traceable
+from langsmith import traceable, trace as ls_trace
 from openai import OpenAI
 
 from app.core.services.stt_google import GoogleSTT, STTConfig
@@ -318,79 +319,93 @@ async def ws_stream(websocket: WebSocket):
         sample_rate_hz = int(start.get("sample_rate_hz", 16000))
         interim_results = bool(start.get("interim_results", True))
 
-        audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue()
-        recv_task = asyncio.create_task(audio_receiver(websocket, audio_q))
+        with ls_trace(name="ws_voice_pipeline", run_type="chain", metadata={"trace_id": trace_id, "site_id": site_id}):
+            audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue()
+            t_audio_end: list = []
 
-        await websocket.send_text(json.dumps({
-            "type": "status",
-            "stage": "stt_start",
-            "trace_id": trace_id,
-        }))
+            async def _receiver_with_timer():
+                await audio_receiver(websocket, audio_q)
+                t_audio_end.append(time.perf_counter())
 
-        last_interim = ""
-        last_final = ""
-        last_lang2 = "ko-KR"  # ✅ 통일
-
-        async for ev in stt.stream_events(
-            audio_q,
-            primary_language=stt_language,
-            sample_rate_hz=sample_rate_hz,
-            interim_results=interim_results,
-            single_utterance=False,
-        ):
-            last_lang2 = ev.language_code or last_lang2
-            if ev.is_final:
-                last_final = ev.transcript
-            else:
-                last_interim = ev.transcript
+            recv_task = asyncio.create_task(_receiver_with_timer())
 
             await websocket.send_text(json.dumps({
-                "type": "stt_final" if ev.is_final else "stt_interim",
-                "text": ev.transcript,
-                "language_code": ev.language_code,
-                "confidence": ev.confidence,
-                "is_final": ev.is_final,
+                "type": "status",
+                "stage": "stt_start",
+                "trace_id": trace_id,
+            }))
+
+            last_interim = ""
+            last_final = ""
+            last_lang2 = "ko"
+
+            async for ev in stt.stream_events(
+                audio_q,
+                primary_language=stt_language,
+                sample_rate_hz=sample_rate_hz,
+                interim_results=interim_results,
+                single_utterance=False,
+            ):
+                last_lang2 = ev.language_code or last_lang2
+                if ev.is_final:
+                    last_final = ev.transcript
+                else:
+                    last_interim = ev.transcript
+
+                await websocket.send_text(json.dumps({
+                    "type": "stt_final" if ev.is_final else "stt_interim",
+                    "text": ev.transcript,
+                    "language_code": ev.language_code,
+                    "confidence": ev.confidence,
+                    "is_final": ev.is_final,
+                    "trace_id": trace_id,
+                }, ensure_ascii=False))
+
+            t_stt_final = time.perf_counter()
+            stt_latency_ms = round((t_stt_final - t_audio_end[0]) * 1000) if t_audio_end else None
+            with ls_trace(name="stt_processing", run_type="tool",
+                          metadata={"latency_ms": stt_latency_ms, "language": stt_language}):
+                pass
+
+            if recv_task:
+                await recv_task
+
+            await websocket.send_text(json.dumps({
+                "type": "status",
+                "stage": "stt_done",
+                "trace_id": trace_id,
+            }))
+
+            query = (last_final or last_interim).strip()
+            if not query:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "code": "EMPTY_TRANSCRIPT",
+                    "message": "no transcript",
+                    "trace_id": trace_id,
+                }))
+                await websocket.close()
+                return
+
+            await websocket.send_text(json.dumps({
+                "type": "status",
+                "stage": "llm_start",
+                "trace_id": trace_id,
+            }))
+
+            result = await asyncio.to_thread(traced_text_run, query, site_id, last_lang2)
+
+            await websocket.send_text(json.dumps({
+                "type": "final_text",
+                "site_id": site_id,
+                "language_code": last_lang2,
+                "query": result.query,
+                "answer": result.answer,
                 "trace_id": trace_id,
             }, ensure_ascii=False))
 
-        if recv_task:
-            await recv_task
-
-        await websocket.send_text(json.dumps({
-            "type": "status",
-            "stage": "stt_done",
-            "trace_id": trace_id,
-        }))
-
-        query = (last_final or last_interim).strip()
-        if not query:
-            await websocket.send_text(json.dumps({
-                "type": "error",
-                "code": "EMPTY_TRANSCRIPT",
-                "message": "no transcript",
-                "trace_id": trace_id,
-            }))
+            await websocket.send_text(json.dumps({"type": "done", "trace_id": trace_id}))
             await websocket.close()
-            return
-
-        await websocket.send_text(json.dumps({
-            "type": "status",
-            "stage": "llm_start",
-            "trace_id": trace_id,
-        }))
-
-        result = await asyncio.to_thread(traced_text_run, query, site_id, last_lang2)
-
-        await websocket.send_text(json.dumps({
-            "type": "final_text",
-            "site_id": site_id,
-            "language_code": last_lang2,
-            "query": result.query,
-            "answer": result.answer,
-            "trace_id": trace_id,
-        }, ensure_ascii=False))
-
-        await websocket.send_text(json.dumps({"type": "done", "trace_id": trace_id}))
 
     except WebSocketDisconnect:
         return
