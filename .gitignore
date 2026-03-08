@@ -20,4 +20,4 @@ google_key.json
 # audio files
 *.wav
 *.mp3
-*.md
+API_SPEC.md
