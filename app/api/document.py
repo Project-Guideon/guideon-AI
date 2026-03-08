@@ -3,6 +3,8 @@ Core 연동 문서 처리 엔드포인트
 
 - POST /v1/documents/process : Core에서 doc_id + storage_url 받아 처리 후 콜백
 """
+from typing import Literal
+
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 
@@ -18,7 +20,7 @@ class ProcessDocumentRequest(BaseModel):
     storage_url: str
     chunk_size: int = 500
     chunk_overlap: int = 50
-    embedding_model: str = "text-embedding-3-small"
+    embedding_model: Literal["text-embedding-3-small"] = "text-embedding-3-small"
 
 
 @router.post("/v1/documents/process")
