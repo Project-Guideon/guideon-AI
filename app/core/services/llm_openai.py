@@ -30,7 +30,7 @@ class OpenAILLM:
             temperature=self.cfg.temperature,
             max_tokens=max_tokens or self.cfg.max_tokens,
         )
-        return response.choices[0].message.content.strip()
+        return (response.choices[0].message.content or "").strip()
 
     def generate(self, query: str, contexts: List[RetrievedChunk]) -> str:
         #query는 stt로 만들어진 질문 텍스트, contexts는 rag로 검색된 관련 정보 리스트
@@ -64,4 +64,4 @@ class OpenAILLM:
             max_tokens=self.cfg.max_tokens,
         )
 
-        return response.choices[0].message.content.strip()
+        return (response.choices[0].message.content or "").strip()
