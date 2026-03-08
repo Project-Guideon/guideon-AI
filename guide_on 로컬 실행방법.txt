@@ -1,0 +1,17 @@
+
+
+.\.guideon_AI\Scripts\activate.bat
+
+# 1. 문서 정보 확인
+docker exec -i guideon-db psql -U postgres -d guideon_db -c "SELECT doc_id, site_id, original_name, status, chunk_size FROM tb_document;"
+
+# 2. 청크 개수 확인
+docker exec -i guideon-db psql -U postgres -d guideon_db -c "SELECT COUNT(*) as chunk_count FROM tb_doc_chunk WHERE doc_id=1;"
+
+
+
+3.청크된 내용 확인방법:
+docker exec -i guideon-db psql -U postgres -d guideon_db -c "SELECT chunk_index, content FROM tb_doc_chunk WHERE doc_id=1 AND chunk_index=1;"
+
+4.  테이블 1번부터되게 초기화
+docker exec -i guideon-db psql -U postgres -d guideon_db -c "TRUNCATE TABLE tb_document CASCADE; TRUNCATE TABLE tb_doc_chunk CASCADE; ALTER TABLE tb_document ALTER COLUMN doc_id RESTART WITH 1; ALTER TABLE tb_doc_chunk ALTER COLUMN chunk_id RESTART WITH 1;
