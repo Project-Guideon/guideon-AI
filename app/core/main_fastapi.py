@@ -12,6 +12,7 @@ from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response, JSONResponse
+from pydantic import BaseModel
 from psycopg.errors import UniqueViolation
 from dotenv import load_dotenv
 from langsmith import traceable, trace as ls_trace
@@ -89,9 +90,15 @@ def traced_text_run(query: str, site_id: int, language_code: str):
     return text_pipeline.run(query=query, site_id=site_id, language_code=language_code)
 
 
+class TextQARequest(BaseModel):
+    query: str
+    site_id: int = 1
+    language_code: str = "ko-KR"
+
+
 @app.post("/text_qa")
-async def text_qa(query: str, site_id: int = 1, language_code: str = "ko-KR"):
-    result = await asyncio.to_thread(traced_text_run, query, site_id, language_code)
+async def text_qa(req: TextQARequest):
+    result = await asyncio.to_thread(traced_text_run, req.query, req.site_id, req.language_code)
     return JSONResponse({"query": result.query, "answer": result.answer})
 
 
