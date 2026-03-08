@@ -244,6 +244,12 @@ def generate_search_summary(
         result["summary"] = content[:200]
     if "keywords" not in result or not isinstance(result["keywords"], list):
         result["keywords"] = []
+    else:
+        result["keywords"] = [
+            str(keyword).strip()
+            for keyword in result["keywords"]
+            if str(keyword).strip()
+        ]
 
     return result
 
