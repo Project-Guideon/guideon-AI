@@ -12,6 +12,7 @@ clean_pdf_text, chunk_text 헬퍼만 재사용.
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import os
 
@@ -26,6 +27,52 @@ MODEL_NAME = "text-embedding-3-small"
 CORE_BASE_URL = os.getenv("CORE_BASE_URL", "http://localhost:8080")
 
 
+def _extract_text_from_pdf(pdf_bytes: bytes) -> list[str]:
+    """pdfplumber는 동기 라이브러리 → to_thread로 호출"""
+    texts = []
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        for i, page in enumerate(pdf.pages):
+            t = page.extract_text(x_tolerance=2, y_tolerance=2) or ""
+            texts.append(f"\n\n--- page {i+1} ---\n{t}")
+    return texts
+
+
+def _process_chunks_sync(
+    doc_id: int,
+    site_id: int,
+    chunks: list[str],
+    chunk_size: int,
+    chunk_overlap: int,
+    openai_client,
+    embedding_model: str,
+) -> None:
+    """DB 작업 + 임베딩 API 호출은 동기 블로킹 → to_thread로 호출"""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM tb_doc_chunk WHERE doc_id = %s", (doc_id,))
+            for idx, chunk in enumerate(chunks):
+                emb = openai_client.embeddings.create(
+                    model=embedding_model,
+                    input=chunk,
+                ).data[0].embedding
+                meta = {
+                    "chunk_index": idx,
+                    "chunk_size": chunk_size,
+                    "chunk_overlap": chunk_overlap,
+                    "embed_model": embedding_model,
+                    "extractor": "pdfplumber",
+                }
+                cur.execute(
+                    """
+                    INSERT INTO tb_doc_chunk
+                    (site_id, doc_id, chunk_index, content, metadata, embedding)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (site_id, doc_id, idx, chunk, Jsonb(meta), emb),
+                )
+        conn.commit()
+
+
 async def process_pdf_from_url(
     doc_id: int,
     site_id: int,
@@ -33,6 +80,7 @@ async def process_pdf_from_url(
     chunk_size: int,
     chunk_overlap: int,
     openai_client,
+    embedding_model: str = MODEL_NAME,
 ) -> None:
     """
     Core에서 요청받은 문서를 처리하고 결과를 Core에 콜백.
@@ -47,12 +95,8 @@ async def process_pdf_from_url(
             resp.raise_for_status()
             pdf_bytes = resp.content
 
-        # 2. 텍스트 추출
-        texts = []
-        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-            for i, page in enumerate(pdf.pages):
-                t = page.extract_text(x_tolerance=2, y_tolerance=2) or ""
-                texts.append(f"\n\n--- page {i+1} ---\n{t}")
+        # 2. 텍스트 추출 (블로킹 작업을 스레드 풀에서 실행)
+        texts = await asyncio.to_thread(_extract_text_from_pdf, pdf_bytes)
 
         raw = clean_pdf_text("".join(texts).strip())
         if not raw or len(raw.strip()) < 30:
@@ -62,31 +106,11 @@ async def process_pdf_from_url(
         chunks = chunk_text(raw, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         print(f"[processor] doc_id={doc_id} | chunks={len(chunks)}")
 
-        # 4. 임베딩 + tb_doc_chunk INSERT
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM tb_doc_chunk WHERE doc_id = %s", (doc_id,))
-                for idx, chunk in enumerate(chunks):
-                    emb = openai_client.embeddings.create(
-                        model=MODEL_NAME,
-                        input=chunk,
-                    ).data[0].embedding
-                    meta = {
-                        "chunk_index": idx,
-                        "chunk_size": chunk_size,
-                        "chunk_overlap": chunk_overlap,
-                        "embed_model": MODEL_NAME,
-                        "extractor": "pdfplumber",
-                    }
-                    cur.execute(
-                        """
-                        INSERT INTO tb_doc_chunk
-                        (site_id, doc_id, chunk_index, content, metadata, embedding)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                        """,
-                        (site_id, doc_id, idx, chunk, Jsonb(meta), emb),
-                    )
-            conn.commit()
+        # 4. 임베딩 + tb_doc_chunk INSERT (블로킹 작업을 스레드 풀에서 실행)
+        await asyncio.to_thread(
+            _process_chunks_sync,
+            doc_id, site_id, chunks, chunk_size, chunk_overlap, openai_client, embedding_model,
+        )
 
         # 5. Core에 COMPLETED 콜백
         await _callback_core(site_id, doc_id, "COMPLETED", None)
