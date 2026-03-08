@@ -49,7 +49,7 @@ def _process_chunks_sync(
     """DB 작업 + 임베딩 API 호출은 동기 블로킹 → to_thread로 호출"""
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM tb_doc_chunk WHERE doc_id = %s", (doc_id,))
+            cur.execute("DELETE FROM tb_doc_chunk WHERE doc_id = %s AND site_id = %s", (doc_id, site_id))
             for idx, chunk in enumerate(chunks):
                 emb = openai_client.embeddings.create(
                     model=embedding_model,
@@ -129,10 +129,11 @@ async def _callback_core(
 
     try:
         async with httpx.AsyncClient() as http:
-            await http.patch(
+            resp = await http.patch(
                 f"{CORE_BASE_URL}/internal/v1/sites/{site_id}/documents/{doc_id}/status",
                 json=payload,
                 timeout=10.0,
             )
+            resp.raise_for_status()
     except Exception as e:
         print(f"[processor] Core 콜백 실패 doc_id={doc_id} status={status}: {e}")
