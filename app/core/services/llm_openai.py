@@ -18,7 +18,7 @@ class LLMConfig:
 class OpenAILLM:
     def __init__(self, cfg: LLMConfig = None):
         self.cfg = cfg or LLMConfig()
-        base_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        base_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=60.0)
         self.client = wrap_openai(base_client)
 
     def chat(self, messages: list, max_tokens: int = None) -> str:
