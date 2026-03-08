@@ -53,6 +53,10 @@ WHERE embedding IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_chunk_v2_tsv_gin
 ON tb_doc_chunk_v2 USING GIN (search_tsv);
 
+-- 중복 삽입 방지용 유니크 인덱스
+CREATE UNIQUE INDEX IF NOT EXISTS uq_chunk_v2_site_doc_chunk
+ON tb_doc_chunk_v2 (site_id, doc_id, chunk_index);
+
 -- 조회용 인덱스
 CREATE INDEX IF NOT EXISTS idx_chunk_v2_doc_site
 ON tb_doc_chunk_v2 (doc_id, site_id);
