@@ -318,45 +318,54 @@ def process_pdf_bytes_v2(
                     "UPDATE tb_document SET status = 'PROCESSING' WHERE doc_id = %s",
                     (doc_id,),
                 )
+            conn.commit()
+
+        # 3-b) DB 밖에서 모든 청크의 요약/임베딩을 미리 준비
+        rows_to_insert = []
+        for idx, sec in enumerate(sections):
+            content = sec["content"]
+            section_title = sec["section_title"]
+
+            # GPT 요약 생성
+            print(f"[PDF-v2] doc_id={doc_id} | 청크 {idx+1}/{len(sections)} 요약 생성 중...")
+            summary_result = generate_search_summary(
+                content=content,
+                section_title=section_title,
+            )
+            summary = summary_result["summary"]
+            keywords = summary_result["keywords"]
+
+            # 검색용 텍스트 조합 → 임베딩
+            search_text = f"{section_title} {summary} {' '.join(keywords)}"
+            emb = client.embeddings.create(
+                model=MODEL_NAME,
+                input=search_text,
+            ).data[0].embedding
+
+            meta = {
+                "chunk_index": idx,
+                "section_level": sec["level"],
+                "embed_model": MODEL_NAME,
+                "summary_model": SUMMARY_MODEL_NAME,
+                "extractor": "pymupdf4llm",
+                "pipeline_version": "v2",
+            }
+
+            rows_to_insert.append((
+                site_id, doc_id, idx, section_title,
+                content, summary, keywords, emb, Jsonb(meta),
+            ))
+
+        # 3-c) DELETE → INSERT → COMPLETED 를 단일 트랜잭션으로 원자적 실행
+        with get_conn() as conn:
+            with conn.cursor() as cur:
                 if purge_old_chunks:
                     cur.execute(
                         "DELETE FROM tb_doc_chunk_v2 WHERE doc_id = %s",
                         (doc_id,),
                     )
-            conn.commit()
 
-        # 3-b) 청킹/임베딩/저장
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                for idx, sec in enumerate(sections):
-                    content = sec["content"]
-                    section_title = sec["section_title"]
-
-                    # GPT 요약 생성
-                    print(f"[PDF-v2] doc_id={doc_id} | 청크 {idx+1}/{len(sections)} 요약 생성 중...")
-                    summary_result = generate_search_summary(
-                        content=content,
-                        section_title=section_title,
-                    )
-                    summary = summary_result["summary"]
-                    keywords = summary_result["keywords"]
-
-                    # 검색용 텍스트 조합 → 임베딩
-                    search_text = f"{section_title} {summary} {' '.join(keywords)}"
-                    emb = client.embeddings.create(
-                        model=MODEL_NAME,
-                        input=search_text,
-                    ).data[0].embedding
-
-                    meta = {
-                        "chunk_index": idx,
-                        "section_level": sec["level"],
-                        "embed_model": MODEL_NAME,
-                        "summary_model": SUMMARY_MODEL_NAME,
-                        "extractor": "pymupdf4llm",
-                        "pipeline_version": "v2",
-                    }
-
+                for row in rows_to_insert:
                     cur.execute(
                         """
                         INSERT INTO tb_doc_chunk_v2
@@ -364,10 +373,7 @@ def process_pdf_bytes_v2(
                          content, summary, keywords, embedding, metadata)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
-                        (
-                            site_id, doc_id, idx, section_title,
-                            content, summary, keywords, emb, Jsonb(meta),
-                        ),
+                        row,
                     )
 
                 cur.execute(
