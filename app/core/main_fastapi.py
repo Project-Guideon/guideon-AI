@@ -12,6 +12,7 @@ from typing import Optional
 
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response, JSONResponse
+from psycopg.errors import UniqueViolation
 from dotenv import load_dotenv
 from langsmith import traceable, trace as ls_trace
 from openai import OpenAI
@@ -131,14 +132,28 @@ async def upload_document(
             status_code=409,
         )
 
-    doc_id = create_doc_record(
-        original_name=original_name,
-        file_hash=file_hash,
-        site_id=site_id,
-        file_size=len(pdf_bytes),
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-    )
+    try:
+        doc_id = create_doc_record(
+            original_name=original_name,
+            file_hash=file_hash,
+            site_id=site_id,
+            file_size=len(pdf_bytes),
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+    except UniqueViolation:
+        return JSONResponse(
+            {
+                "success": False,
+                "data": None,
+                "error": {
+                    "code": "DOC_HASH_DUPLICATE",
+                    "message": "동일한 파일이 이미 업로드되어 있습니다.",
+                },
+                "trace_id": str(uuid.uuid4()),
+            },
+            status_code=409,
+        )
 
     # 즉시 응답 후 백그라운드에서 청킹/임베딩/저장 처리
     background_tasks.add_task(
@@ -242,12 +257,26 @@ async def upload_document_v2(
             status_code=409,
         )
 
-    doc_id = create_doc_record_v2(
-        original_name=original_name,
-        file_hash=file_hash,
-        site_id=site_id,
-        file_size=len(pdf_bytes),
-    )
+    try:
+        doc_id = create_doc_record_v2(
+            original_name=original_name,
+            file_hash=file_hash,
+            site_id=site_id,
+            file_size=len(pdf_bytes),
+        )
+    except UniqueViolation:
+        return JSONResponse(
+            {
+                "success": False,
+                "data": None,
+                "error": {
+                    "code": "DOC_HASH_DUPLICATE",
+                    "message": "동일한 파일이 이미 업로드되어 있습니다.",
+                },
+                "trace_id": str(uuid.uuid4()),
+            },
+            status_code=409,
+        )
 
     background_tasks.add_task(
         process_pdf_bytes_v2,
