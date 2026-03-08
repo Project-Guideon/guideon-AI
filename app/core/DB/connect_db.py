@@ -27,10 +27,13 @@ def get_conn():
             f"get_conn: POSTGRES_PORT must be an integer, got {port_str!r}"
         )
 
+    connect_timeout = int(os.getenv("POSTGRES_CONNECT_TIMEOUT", "5"))
+
     return psycopg.connect(
         host=os.getenv("POSTGRES_HOST"),
         port=port,
         dbname=os.getenv("POSTGRES_DB"),
         user=os.getenv("POSTGRES_USER"),
         password=os.getenv("POSTGRES_PASSWORD"),
+        connect_timeout=connect_timeout,
     )
