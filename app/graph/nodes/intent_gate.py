@@ -32,6 +32,9 @@ _SMALLTALK_RULES = [
 ]
 
 
+_ALLOWED_INTENTS = {"smalltalk", "info_request"}
+
+
 def _rule_intent(text: str) -> Optional[str]:
     # info_request 먼저 검사 — 명확한 정보 요청 키워드가 있으면 즉시 반환
     for pattern in _INFO_REQUEST_RULES:
@@ -75,7 +78,11 @@ def make_intent_gate_node(llm: OpenAILLM):
             try:
                 raw = llm.chat(messages, max_tokens=20)
                 intent = json.loads(raw).get("intent", "info_request")
-                method = "llm"
+                if intent not in _ALLOWED_INTENTS:
+                    intent = "info_request"
+                    method = "llm_fallback_default"
+                else:
+                    method = "llm"
             except Exception:
                 intent = "info_request"  # 파싱 실패 시 안전한 기본값
                 method = "llm_fallback_default"

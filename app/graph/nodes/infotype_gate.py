@@ -40,6 +40,9 @@ _DIRECT_LLM_RULES = [
 ]
 
 
+_ALLOWED_INFO_TYPES = {"map_tool", "struct_db", "rag", "direct_llm"}
+
+
 def _rule_infotype(text: str) -> Optional[str]:
     for pattern in _MAP_TOOL_RULES:
         if re.search(pattern, text, re.IGNORECASE):
@@ -89,7 +92,11 @@ def make_infotype_gate_node(llm: OpenAILLM):
             try:
                 raw = llm.chat(messages, max_tokens=30)
                 info_type = json.loads(raw).get("info_type", "rag")
-                method = "llm"
+                if info_type not in _ALLOWED_INFO_TYPES:
+                    info_type = "rag"
+                    method = "llm_fallback_default"
+                else:
+                    method = "llm"
             except Exception:
                 info_type = "rag"  # 파싱 실패 시 안전한 기본값
                 method = "llm_fallback_default"
