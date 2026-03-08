@@ -9,9 +9,27 @@ from dotenv import load_dotenv
 load_dotenv()  # .env 자동 로드
 
 def get_conn():
+    required = [
+        "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB",
+        "POSTGRES_USER", "POSTGRES_PASSWORD",
+    ]
+    missing = [k for k in required if not os.getenv(k)]
+    if missing:
+        raise ValueError(
+            f"get_conn: missing required env vars: {', '.join(missing)}"
+        )
+
+    port_str = os.getenv("POSTGRES_PORT")
+    try:
+        port = int(port_str)
+    except ValueError:
+        raise ValueError(
+            f"get_conn: POSTGRES_PORT must be an integer, got {port_str!r}"
+        )
+
     return psycopg.connect(
         host=os.getenv("POSTGRES_HOST"),
-        port=int(os.getenv("POSTGRES_PORT")),
+        port=port,
         dbname=os.getenv("POSTGRES_DB"),
         user=os.getenv("POSTGRES_USER"),
         password=os.getenv("POSTGRES_PASSWORD"),
