@@ -35,5 +35,6 @@ async def process_document(req: ProcessDocumentRequest, background_tasks: Backgr
         chunk_size=req.chunk_size,
         chunk_overlap=req.chunk_overlap,
         openai_client=client,
+        embedding_model=req.embedding_model,
     )
     return {"ok": True}
