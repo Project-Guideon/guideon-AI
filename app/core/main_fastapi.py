@@ -95,6 +95,29 @@ async def text_qa(query: str, site_id: int = 1, language_code: str = "ko-KR"):
     return JSONResponse({"query": result.query, "answer": result.answer})
 
 
+def _check_duplicate(file_hash: str, site_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT doc_id FROM tb_document WHERE file_hash = %s AND site_id = %s",
+                (file_hash, site_id),
+            )
+            return cur.fetchone()
+
+
+def _get_doc_status(doc_id: int, site_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT doc_id, status, original_name, file_hash,
+                          failed_reason, processed_at
+                   FROM tb_document
+                   WHERE doc_id = %s AND site_id = %s""",
+                (doc_id, site_id),
+            )
+            return cur.fetchone()
+
+
 @app.post("/sites/{site_id}/documents/upload")
 async def upload_document(
     site_id: int,
@@ -110,13 +133,7 @@ async def upload_document(
     created_at = datetime.now(timezone.utc).isoformat()
 
     # 409: 동일 site에 같은 파일(해시) 중복 업로드 체크
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT doc_id FROM tb_document WHERE file_hash = %s AND site_id = %s",
-                (file_hash, site_id),
-            )
-            existing = cur.fetchone()
+    existing = await asyncio.to_thread(_check_duplicate, file_hash, site_id)
 
     if existing:
         return JSONResponse(
@@ -133,7 +150,8 @@ async def upload_document(
         )
 
     try:
-        doc_id = create_doc_record(
+        doc_id = await asyncio.to_thread(
+            create_doc_record,
             original_name=original_name,
             file_hash=file_hash,
             site_id=site_id,
@@ -183,16 +201,7 @@ async def upload_document(
 # 문서 처리 상태 조회 API
 @app.get("/sites/{site_id}/documents/{doc_id}/status")
 async def get_document_status(site_id: int, doc_id: int):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """SELECT doc_id, status, original_name, file_hash,
-                          failed_reason, processed_at
-                   FROM tb_document
-                   WHERE doc_id = %s AND site_id = %s""",
-                (doc_id, site_id),
-            )
-            row = cur.fetchone()
+    row = await asyncio.to_thread(_get_doc_status, doc_id, site_id)
 
     if not row:
         return JSONResponse(
@@ -235,13 +244,7 @@ async def upload_document_v2(
     original_name = file.filename or "unknown"
     created_at = datetime.now(timezone.utc).isoformat()
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT doc_id FROM tb_document WHERE file_hash = %s AND site_id = %s",
-                (file_hash, site_id),
-            )
-            existing = cur.fetchone()
+    existing = await asyncio.to_thread(_check_duplicate, file_hash, site_id)
 
     if existing:
         return JSONResponse(
@@ -258,7 +261,8 @@ async def upload_document_v2(
         )
 
     try:
-        doc_id = create_doc_record_v2(
+        doc_id = await asyncio.to_thread(
+            create_doc_record_v2,
             original_name=original_name,
             file_hash=file_hash,
             site_id=site_id,
