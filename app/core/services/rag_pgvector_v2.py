@@ -208,7 +208,9 @@ class PgVectorRAG_V2:
             if cid not in chunk_data:
                 chunk_data[cid] = item
 
-        sorted_ids = sorted(rrf_scores, key=lambda x: rrf_scores[x], reverse=True)
+        sorted_ids = sorted(
+            rrf_scores, key=lambda x: rrf_scores[x], reverse=True
+        )[:k]
 
         chunks: List[RetrievedChunkV2] = []
         chunk_embs: List[np.ndarray] = []
