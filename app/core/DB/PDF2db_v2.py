@@ -124,6 +124,32 @@ def parse_markdown_sections(
         else:
             # 단락(\n\n) 기준으로 분할
             paragraphs = sec["content"].split("\n\n")
+
+            # 단일 단락이 max_chunk_size 초과 시 문장 단위로 재분할
+            split_paras: List[str] = []
+            for _p in paragraphs:
+                if len(_p) <= max_chunk_size:
+                    split_paras.append(_p)
+                else:
+                    sents = re.split(r"(?<=[.?!。])\s+", _p)
+                    buf = ""
+                    for s in sents:
+                        if buf and len(buf) + len(s) + 1 > max_chunk_size:
+                            split_paras.append(buf)
+                            buf = s
+                        elif len(s) > max_chunk_size:
+                            if buf:
+                                split_paras.append(buf)
+                                buf = ""
+                            step = max(max_chunk_size - chunk_overlap, 1)
+                            for i in range(0, len(s), step):
+                                split_paras.append(s[i : i + max_chunk_size])
+                        else:
+                            buf = buf + " " + s if buf else s
+                    if buf:
+                        split_paras.append(buf)
+            paragraphs = split_paras
+
             current = ""
             overlap_buf = ""   # 이전 chunk의 마지막 단락(들)을 보관
             part_num = 0
