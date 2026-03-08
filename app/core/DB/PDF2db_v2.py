@@ -233,7 +233,10 @@ def generate_search_summary(
         response_format={"type": "json_object"},
     )
 
-    raw = response.choices[0].message.content.strip()
+    raw_content = response.choices[0].message.content
+    if raw_content is None:
+        return {"summary": content[:200], "keywords": []}
+    raw = raw_content.strip()
     try:
         result = json.loads(raw)
     except json.JSONDecodeError:
