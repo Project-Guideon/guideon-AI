@@ -392,5 +392,6 @@ def process_pdf_bytes_v2(
                         (str(e), doc_id),
                     )
                 conn.commit()
-        except Exception:
-            pass
+        except Exception as update_err:
+            print(f"[PDF-v2] doc_id={doc_id} | 상태 갱신 실패: {update_err}")
+        raise
