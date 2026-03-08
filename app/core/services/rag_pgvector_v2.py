@@ -267,7 +267,7 @@ class PgVectorRAG_V2:
                            embedding,
                            1 - (embedding <=> %s::vector) AS similarity
                     FROM tb_doc_chunk_v2
-                    WHERE site_id = %s
+                    WHERE site_id = %s AND embedding IS NOT NULL
                     ORDER BY embedding <=> %s::vector
                     LIMIT %s
                     """,
@@ -279,6 +279,8 @@ class PgVectorRAG_V2:
         chunk_embs = []
 
         for chunk_id, doc_id, content, meta, embedding, similarity in rows:
+            if embedding is None:
+                continue
             if meta is None:
                 meta = {}
             chunks.append(
