@@ -17,6 +17,7 @@ python-dotenv>=1.2,<2.0
 # Audio Processing (STT/TTS common)
 # ===============================
 numpy>=1.26,<2.0
+sounddevice>=0.5,<1.0
 soundfile>=0.13,<1.0
 librosa>=0.11,<1.0
 
