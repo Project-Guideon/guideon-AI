@@ -374,7 +374,7 @@ def process_pdf_bytes_v2(
                         INSERT INTO tb_doc_chunk_v2
                         (site_id, doc_id, chunk_index, section_title,
                          content, summary, keywords, embedding, metadata)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s::vector, %s)
                         """,
                         row,
                     )
