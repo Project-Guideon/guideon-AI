@@ -15,6 +15,8 @@ __pycache__/
 
 # credentials & environment
 google_key.json
+google-credentials.json
+*.json
 .env
 
 # documentation
