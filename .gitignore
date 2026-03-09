@@ -1,3 +1,6 @@
+# IDE
+.idea/
+
 # virtual environments
 .guideon_AI/
 .venv/
@@ -12,6 +15,8 @@ __pycache__/
 
 # credentials & environment
 google_key.json
+google-credentials.json
+*.json
 .env
 
 # documentation
