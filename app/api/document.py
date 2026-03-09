@@ -3,13 +3,10 @@ Core 연동 문서 처리 엔드포인트
 
 - POST /v1/documents/process : Core에서 doc_id + storage_url 받아 처리 후 콜백
 """
-from typing import Literal
-
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 
 from app.core.services.document_processor import process_pdf_from_url
-from app.core.dependencies import client
 
 router = APIRouter()
 
@@ -18,9 +15,6 @@ class ProcessDocumentRequest(BaseModel):
     doc_id: int
     site_id: int
     storage_url: str
-    chunk_size: int = 500
-    chunk_overlap: int = 50
-    embedding_model: Literal["text-embedding-3-small"] = "text-embedding-3-small"
 
 
 @router.post("/v1/documents/process")
@@ -34,9 +28,5 @@ async def process_document(req: ProcessDocumentRequest, background_tasks: Backgr
         doc_id=req.doc_id,
         site_id=req.site_id,
         storage_url=req.storage_url,
-        chunk_size=req.chunk_size,
-        chunk_overlap=req.chunk_overlap,
-        openai_client=client,
-        embedding_model=req.embedding_model,
     )
     return {"ok": True}
