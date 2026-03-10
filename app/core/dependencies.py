@@ -13,7 +13,7 @@ from app.core.services.tts_google import GoogleTTS, TTSConfig
 from app.core.services.rag_pgvector import PgVectorRAG, OpenAIEmbedder
 from app.core.services.rag_pgvector_v2 import PgVectorRAG_V2
 from app.core.services.llm_openai import OpenAILLM, LLMConfig
-from app.core.services.pipeline import VoicePipeline, TextPipeline
+from app.core.services.pipeline import VoicePipeline, TextPipeline, StreamingVoicePipeline
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
@@ -31,7 +31,7 @@ llm = OpenAILLM(LLMConfig(model="gpt-4o-mini", temperature=0.7, max_tokens=500))
 
 pipeline = VoicePipeline(stt=stt, rag=rag, llm=llm, tts=tts)
 text_pipeline = TextPipeline(rag=rag, llm=llm)
-
+streaming_pipeline = StreamingVoicePipeline(stt=stt, rag=rag, llm=llm, tts=tts)
 
 @traceable(name="voice_qa_pipeline")
 def traced_voice_run(audio_bytes: bytes, site_id: int):
