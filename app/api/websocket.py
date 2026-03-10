@@ -221,8 +221,8 @@ async def ws_stream(websocket: WebSocket):
         sample_rate_hz = int(start.get("sample_rate_hz", 16000))
         interim_results = bool(start.get("interim_results", True))
 
-        tts_stream = bool(start.get("tts_stream", False))
-        realtime = bool(start.get("realtime", False))
+        tts_stream = bool(start.get("tts_stream", True))
+        realtime = bool(start.get("realtime", True))
 
         with ls_trace(
             name="ws_voice_pipeline",
