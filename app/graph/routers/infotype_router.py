@@ -12,13 +12,13 @@ def infotype_router(state: GraphState) -> str:
         "map_tool"      → map_tool 노드
         "struct_db"     → struct_db 노드
         "direct_llm"    → direct_llm 노드
-        "query_rewrite" → KO RAG 경로 (translate 없이 바로)
+        "retrieve" → KO RAG 경로 (translate 없이 바로)
         "translate_ko"  → Foreign RAG 경로 (한국어 변환 먼저)
     """
     info_type: str = state.get("info_type", "rag")
     language_code: str = state.get("language_code", "ko")
 
     if info_type == "rag":
-        return "query_rewrite" if language_code == "ko" else "translate_ko"
+        return "retrieve" if language_code == "ko" else "translate_ko"
 
     return info_type  # "map_tool" | "struct_db" | "direct_llm"
