@@ -7,6 +7,7 @@ from app.graph.state import GraphState
 
 _ALLOWED_INTENTS = {"rag", "smalltalk", "event", "struct_db"}
 _DEFAULT_RANKING = ["rag","struct_db", "smalltalk", "event"]
+_MAX_INTENTS = 2  # 상위 N개 의도만 시도 (1~4)
 
 
 def make_intent_gate_node(llm: OpenAILLM):
@@ -85,6 +86,9 @@ def make_intent_gate_node(llm: OpenAILLM):
             "ranking": ranking,
             "method": method,
         }
+
+        # 상위 N개 의도만 시도
+        ranking = ranking[:_MAX_INTENTS]
 
         return {
             "intent_ranking": ranking,
