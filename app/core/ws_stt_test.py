@@ -7,7 +7,7 @@ import base64
 import time
 
 WS_URL = "ws://127.0.0.1:8000/ws/stream"
-WAV_PATH = "input1.wav"
+WAV_PATH = "input4.wav"
 
 CHUNK_MS = 50
 SAVE_TTS_AUDIO = True
