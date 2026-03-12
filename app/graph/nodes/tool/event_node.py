@@ -18,6 +18,9 @@ def event_node(state: GraphState) -> dict:
 
     # ── stub: 데이터 없음 → check_result = "bad" ─────────────────────
     trace = dict(state.get("trace") or {})
+    flow = list(trace.get("_flow") or [])
+    flow.append("event")
+    trace["_flow"] = flow
     trace["event"] = {"status": "stub", "query": text, "site_id": site_id}
 
     return {

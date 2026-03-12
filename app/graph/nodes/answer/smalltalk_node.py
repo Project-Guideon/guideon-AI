@@ -52,6 +52,9 @@ def make_smalltalk_node(llm: OpenAILLM):
             check_result = "bad"
 
         trace = dict(state.get("trace") or {})
+        flow = list(trace.get("_flow") or [])
+        flow.append("smalltalk")
+        trace["_flow"] = flow
         trace["smalltalk"] = {"user_language": user_language, "check_result": check_result}
 
         return {"answer_text": answer, "check_result": check_result, "trace": trace}

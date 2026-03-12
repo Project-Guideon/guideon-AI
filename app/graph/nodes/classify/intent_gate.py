@@ -77,6 +77,9 @@ def make_intent_gate_node(llm: OpenAILLM):
             method = "llm_fallback_default"
 
         trace = dict(state.get("trace") or {})
+        flow = list(trace.get("_flow") or [])
+        flow.append("intent_gate")
+        trace["_flow"] = flow
         trace["intent_gate"] = {
             "text": text,
             "ranking": ranking,

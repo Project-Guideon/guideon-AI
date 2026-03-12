@@ -18,6 +18,9 @@ def struct_db_node(state: GraphState) -> dict:
 
     # ── stub: 데이터 없음 → check_result = "bad" ─────────────────────
     trace = dict(state.get("trace") or {})
+    flow = list(trace.get("_flow") or [])
+    flow.append("struct_db")
+    trace["_flow"] = flow
     trace["struct_db"] = {"status": "stub", "query": text, "site_id": site_id}
 
     return {

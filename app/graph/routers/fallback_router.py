@@ -21,9 +21,17 @@ def fallback_dispatch_node(state: GraphState) -> dict:
     language_code: str = state.get("language_code", "ko")
 
     trace = dict(state.get("trace") or {})
+    flow = list(trace.get("_flow") or [])
+    flow.append("fallback_dispatch")
+    trace["_flow"] = flow
+
+    # fallback 이력을 리스트로 누적 (여러 번 호출되므로 덮어쓰지 않음)
+    fallback_history = list(trace.get("fallback_history") or [])
 
     if check_result == "good":
-        trace["fallback_dispatch"] = {"action": "done", "index": index}
+        entry = {"action": "done", "index": index, "intent": ranking[index] if index < len(ranking) else "?"}
+        fallback_history.append(entry)
+        trace["fallback_history"] = fallback_history
         return {"fallback_next": "done", "trace": trace}
 
     # ── 다음 의도로 이동 ──────────────────────────────────────────────
@@ -31,11 +39,13 @@ def fallback_dispatch_node(state: GraphState) -> dict:
 
     if next_index >= len(ranking):
         # 모든 의도 소진 → clarify
-        trace["fallback_dispatch"] = {
+        entry = {
             "action": "clarify",
             "index": next_index,
             "reason": "all intents exhausted",
         }
+        fallback_history.append(entry)
+        trace["fallback_history"] = fallback_history
         return {
             "fallback_next": "clarify",
             "current_intent_index": next_index,
@@ -51,13 +61,16 @@ def fallback_dispatch_node(state: GraphState) -> dict:
     else:
         fallback_next = next_intent
 
-    trace["fallback_dispatch"] = {
+    entry = {
         "action": "fallback",
         "from_index": index,
+        "from_intent": ranking[index] if index < len(ranking) else "?",
         "to_index": next_index,
-        "next_intent": next_intent,
+        "to_intent": next_intent,
         "fallback_next": fallback_next,
     }
+    fallback_history.append(entry)
+    trace["fallback_history"] = fallback_history
 
     return {
         "fallback_next": fallback_next,

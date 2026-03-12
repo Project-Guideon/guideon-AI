@@ -71,6 +71,9 @@ def make_tts_builder_node(tts: GoogleTTS):
         tts_audio = active_tts.synthesize(tts_text)
 
         trace = dict(state.get("trace") or {})
+        flow = list(trace.get("_flow") or [])
+        flow.append("tts_builder")
+        trace["_flow"] = flow
         trace["tts_builder"] = {
             "tts_lang": tts_lang,
             "tts_text_length": len(tts_text),
