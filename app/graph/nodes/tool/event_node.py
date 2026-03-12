@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from app.graph.state import GraphState
 
-# TODO: 실제 운영시간/요금/예약 등 정형 DB 연결 시 이 노드 내부만 교체
+# TODO: 실제 이벤트 DB 테이블 생성 후 이 노드 내부만 교체
 
 
-def struct_db_node(state: GraphState) -> dict:
-    """정형 정보 조회 노드 (현재 stub).
+def event_node(state: GraphState) -> dict:
+    """이벤트 조회 노드 (현재 stub).
 
     실제 구현 시 교체할 것:
     - 입력: normalized_text, site_id, user_language
-    - 조회 키: 운영시간 / 입장료 / 휴무 / 예약 / 연락처 / 규정 등
+    - 조회: 현재/예정 이벤트, 축제, 공연, 전시 등
     - 출력: answer_text (user_language 로 LLM 직접 생성)
     """
     site_id: int = state.get("site_id", 1)
@@ -18,7 +18,7 @@ def struct_db_node(state: GraphState) -> dict:
 
     # ── stub: 데이터 없음 → check_result = "bad" ─────────────────────
     trace = dict(state.get("trace") or {})
-    trace["struct_db"] = {"status": "stub", "query": text, "site_id": site_id}
+    trace["event"] = {"status": "stub", "query": text, "site_id": site_id}
 
     return {
         "answer_text": "",

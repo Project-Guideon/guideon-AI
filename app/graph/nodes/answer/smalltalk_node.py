@@ -44,18 +44,16 @@ def make_smalltalk_node(llm: OpenAILLM):
             {"role": "user", "content": text},
         ]
 
+        check_result = "good"
         try:
             answer = llm.chat(messages, max_tokens=100)
         except Exception:
-            answer = (
-                "안녕하세요! 무엇을 도와드릴까요?"
-                if user_language == "ko"
-                else "Hello! How can I help you?"
-            )
+            answer = ""
+            check_result = "bad"
 
         trace = dict(state.get("trace") or {})
-        trace["smalltalk"] = {"user_language": user_language}
+        trace["smalltalk"] = {"user_language": user_language, "check_result": check_result}
 
-        return {"answer_text": answer, "trace": trace}
+        return {"answer_text": answer, "check_result": check_result, "trace": trace}
 
     return smalltalk_node
