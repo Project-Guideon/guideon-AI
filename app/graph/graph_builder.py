@@ -10,25 +10,35 @@ from app.core.services.tts_google import GoogleTTS
 
 from app.graph.state import GraphState
 
-# ── 노드 ──────────────────────────────────────────────────────────────────────
-from app.graph.nodes.stt_node import make_stt_node
-from app.graph.nodes.normalize_node import normalize_node
-from app.graph.nodes.intent_gate import make_intent_gate_node
-from app.graph.nodes.infotype_gate import make_infotype_gate_node
-from app.graph.nodes.smalltalk_node import make_smalltalk_node
-from app.graph.nodes.map_tool_node import map_tool_node
-from app.graph.nodes.struct_db_node import struct_db_node
-from app.graph.nodes.direct_llm_node import make_direct_llm_node
-from app.graph.nodes.answer_compose import make_answer_compose_node
-from app.graph.nodes.translate_node import make_translate_node
-#from app.graph.nodes.query_rewrite import make_query_rewrite_node
-from app.graph.nodes.retrieve_node import make_retrieve_node
-from app.graph.nodes.retrieve_node_v2 import make_retrieve_node_v2
-from app.graph.nodes.context_pack import context_pack_node
-from app.graph.nodes.answer_generate import make_answer_generate_node
-from app.graph.nodes.answer_check import answer_check_node
-from app.graph.nodes.clarify_node import make_clarify_node
-from app.graph.nodes.tts_builder import make_tts_builder_node
+# ── 노드: input ───────────────────────────────────────────────────────────────
+from app.graph.nodes.input.stt_node import make_stt_node
+from app.graph.nodes.input.normalize_node import normalize_node
+
+# ── 노드: classify ────────────────────────────────────────────────────────────
+from app.graph.nodes.classify.intent_gate import make_intent_gate_node
+from app.graph.nodes.classify.infotype_gate import make_infotype_gate_node
+
+# ── 노드: rag ─────────────────────────────────────────────────────────────────
+from app.graph.nodes.rag.translate_node import make_translate_node
+#from app.graph.nodes.rag.query_rewrite import make_query_rewrite_node
+from app.graph.nodes.rag.retrieve_node import make_retrieve_node
+from app.graph.nodes.rag.retrieve_node_v2 import make_retrieve_node_v2
+from app.graph.nodes.rag.context_pack import context_pack_node
+
+# ── 노드: answer ──────────────────────────────────────────────────────────────
+from app.graph.nodes.answer.answer_generate import make_answer_generate_node
+from app.graph.nodes.answer.answer_check import answer_check_node
+from app.graph.nodes.answer.answer_compose import make_answer_compose_node
+from app.graph.nodes.answer.clarify_node import make_clarify_node
+from app.graph.nodes.answer.smalltalk_node import make_smalltalk_node
+from app.graph.nodes.answer.direct_llm_node import make_direct_llm_node
+
+# ── 노드: tool ────────────────────────────────────────────────────────────────
+from app.graph.nodes.tool.map_tool_node import map_tool_node
+from app.graph.nodes.tool.struct_db_node import struct_db_node
+
+# ── 노드: output ──────────────────────────────────────────────────────────────
+from app.graph.nodes.output.tts_builder import make_tts_builder_node
 
 # ── 라우터 ────────────────────────────────────────────────────────────────────
 from app.graph.routers.intent_router import intent_router
