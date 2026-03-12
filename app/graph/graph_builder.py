@@ -106,8 +106,7 @@ def build_text_graph(rag: PgVectorRAG, llm: OpenAILLM):
             "map_tool":      "map_tool",
             "struct_db":     "struct_db",
             "direct_llm":    "direct_llm",
-            #"query_rewrite": "query_rewrite",
-            "query_rewrite":  "retrieve",
+            "retrieve":  "retrieve",
             "translate_ko":  "translate_ko",
         },
     )
@@ -200,8 +199,7 @@ def build_graph(stt: GoogleSTT, rag: PgVectorRAG, llm: OpenAILLM, tts: GoogleTTS
             "map_tool":      "map_tool",
             "struct_db":     "struct_db",
             "direct_llm":    "direct_llm",
-            #"query_rewrite": "query_rewrite",   # KO RAG 경로
-            "query_rewrite":  "retrieve",
+            "retrieve":  "retrieve",
             "translate_ko":  "translate_ko",    # Foreign RAG 경로
         },
     )
