@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from app.graph.state import GraphState
 
-# TODO: 실제 운영시간/요금/예약 등 정형 DB 연결 시 이 노드 내부만 교체
+# TODO: 실제 장소 DB 테이블 연결 시 이 노드 내부만 교체
 
 
 def struct_db_node(state: GraphState) -> dict:
-    """정형 정보 조회 노드 (현재 stub).
+    """장소/위치 조회 노드 (현재 stub).
 
     실제 구현 시 교체할 것:
     - 입력: normalized_text, site_id, user_language
-    - 조회 키: 운영시간 / 입장료 / 휴무 / 예약 / 연락처 / 규정 등
+    - 조회: DB에 저장된 장소 (화장실, 주차장, 건물, 문, 매표소, 식당 등)의 위치
     - 출력: answer_text (user_language 로 LLM 직접 생성)
     """
     site_id: int = state.get("site_id", 1)
