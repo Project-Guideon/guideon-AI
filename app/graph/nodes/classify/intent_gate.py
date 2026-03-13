@@ -67,8 +67,15 @@ def make_intent_gate_node(llm: OpenAILLM):
                 ranking = _DEFAULT_RANKING
                 method = "llm_fallback_default"
             else:
-                # 허용된 의도만 필터링 + 누락된 의도 추가
-                valid = [r for r in ranking if r in _ALLOWED_INTENTS]
+                # 정규화(strip/lower) → 중복 제거(순서 유지) → 허용 필터링
+                seen: set[str] = set()
+                normalized: list[str] = []
+                for r in ranking:
+                    s = r.strip().lower() if isinstance(r, str) else ""
+                    if s and s not in seen:
+                        seen.add(s)
+                        normalized.append(s)
+                valid = [r for r in normalized if r in _ALLOWED_INTENTS]
                 missing = [i for i in _DEFAULT_RANKING if i not in valid]
                 ranking = valid + missing
                 if len(valid) < len(_ALLOWED_INTENTS):
