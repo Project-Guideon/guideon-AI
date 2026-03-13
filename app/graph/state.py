@@ -18,11 +18,10 @@ class GraphState(TypedDict, total=False):
     # ── 정규화 ────────────────────────────────────────────────────────────
     normalized_text: str       # 잡음·공백 정제 후 텍스트
 
-    # ── 의도 분류 ─────────────────────────────────────────────────────────
-    intent: Literal["smalltalk", "info_request"]
-
-    # ── 정보 유형 분류 ────────────────────────────────────────────────────
-    info_type: Literal["rag", "map_tool", "struct_db", "direct_llm"]
+    # ── 의도 분류 (단일 gate → 4분기 + 순위 기반 fallback) ────────────────
+    intent_ranking: List[str]      # ["rag", "event", "struct_db", "smalltalk"] 순위
+    current_intent_index: int      # 현재 시도 중인 의도 인덱스 (0부터)
+    fallback_next: str             # fallback_dispatch가 설정하는 라우팅 키
 
     # ── RAG 파이프라인 ────────────────────────────────────────────────────
     retrieval_query_ko: str            # 검색용 한국어 쿼리
