@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+from openai import APIConnectionError, APITimeoutError, RateLimitError, APIError
+
 from app.core.services.llm_openai import OpenAILLM
 from app.graph.state import GraphState
 
@@ -57,6 +59,7 @@ def make_intent_gate_node(llm: OpenAILLM):
         ]
 
         method = "llm"
+        error = ""
         try:
             raw = llm.chat(messages, max_tokens=60)
             parsed = json.loads(raw)
@@ -80,9 +83,22 @@ def make_intent_gate_node(llm: OpenAILLM):
                 ranking = valid + missing
                 if len(valid) < len(_ALLOWED_INTENTS):
                     method = "llm_partial_fix"
-        except Exception:
+        except json.JSONDecodeError as e:
             ranking = _DEFAULT_RANKING
-            method = "llm_fallback_default"
+            method = "llm_fallback_invalid_json"
+            error = str(e)
+        except (APIConnectionError, APITimeoutError) as e:
+            ranking = _DEFAULT_RANKING
+            method = "llm_fallback_connection_error"
+            error = str(e)
+        except RateLimitError as e:
+            ranking = _DEFAULT_RANKING
+            method = "llm_fallback_rate_limit"
+            error = str(e)
+        except APIError as e:
+            ranking = _DEFAULT_RANKING
+            method = "llm_fallback_api_error"
+            error = f"{e.__class__.__name__}: {e}"
 
         trace = dict(state.get("trace") or {})
         flow = list(trace.get("_flow") or [])
@@ -93,6 +109,8 @@ def make_intent_gate_node(llm: OpenAILLM):
             "ranking": ranking,
             "method": method,
         }
+        if error:
+            trace["intent_gate"]["error"] = error
 
         # 상위 N개 의도만 시도
         ranking = ranking[:_MAX_INTENTS]
