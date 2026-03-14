@@ -41,6 +41,9 @@ def pdf_to_markdown(pdf_bytes: bytes) -> str:
     finally:
         os.unlink(tmp_path)
 
+    # 소제목 패턴(1), 2), …)을 ### 헤더로 변환 → 의미 단위 청크 분할 지원
+    md_text = re.sub(r'^(\d+)\)\s+', r'### \1) ', md_text, flags=re.MULTILINE)
+
     return md_text
 
 
