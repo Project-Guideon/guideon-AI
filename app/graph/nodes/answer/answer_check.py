@@ -4,7 +4,7 @@ from app.graph.state import GraphState
 
 _SIMILARITY_THRESHOLD = 0.2   # 최상위 청크 유사도가 이 값 미만이면 bad
 _MIN_ANSWER_LENGTH = 10       # 답변이 이 글자 수 미만이면 bad
-_MAX_RETRY = 2                # 최대 재시도 횟수
+_MAX_RETRY = 1                # 최대 재시도 횟수 (1회: 일반검색 → MMR 재검색)
 _TOP_K_RETRY = 10             # 재시도 시 top_k
 
 # 답변이 이 문구를 포함하면 사실상 모른다는 뜻 → bad 판정
@@ -49,6 +49,9 @@ def answer_check_node(state: GraphState) -> dict:
 
     # ── 결과 결정 ─────────────────────────────────────────────────────
     trace = dict(state.get("trace") or {})
+    flow = list(trace.get("_flow") or [])
+    flow.append("answer_check")
+    trace["_flow"] = flow
 
     if not is_bad:
         trace["answer_check"] = {"result": "good", "retry_count": retry_count}

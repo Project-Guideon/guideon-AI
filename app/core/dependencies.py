@@ -27,7 +27,7 @@ if RAG_VERSION == "v2":
 else:
     rag = PgVectorRAG(embedder=embedder)
 
-llm = OpenAILLM(LLMConfig(model="gpt-4o-mini", temperature=0.7, max_tokens=500))
+llm = OpenAILLM(LLMConfig(model="gpt-4o-mini", temperature=0.2, max_tokens=150))
 
 pipeline = VoicePipeline(stt=stt, rag=rag, llm=llm, tts=tts)
 text_pipeline = TextPipeline(rag=rag, llm=llm)

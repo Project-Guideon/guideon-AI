@@ -50,6 +50,9 @@ def make_answer_generate_node(llm: OpenAILLM):
                 _NO_RESULT_MSG["en"],
             )
             trace = dict(state.get("trace") or {})
+            flow = list(trace.get("_flow") or [])
+            flow.append("answer_generate")
+            trace["_flow"] = flow
             trace["answer_generate"] = {
                 "user_language": user_language,
                 "chunks_used": 0,
@@ -111,6 +114,9 @@ def make_answer_generate_node(llm: OpenAILLM):
             )
 
         trace = dict(state.get("trace") or {})
+        flow = list(trace.get("_flow") or [])
+        flow.append("answer_generate")
+        trace["_flow"] = flow
         trace["answer_generate"] = {
             "user_language": user_language,
             "chunks_used": len(chunks),
