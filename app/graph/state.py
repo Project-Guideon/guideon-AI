@@ -38,5 +38,14 @@ class GraphState(TypedDict, total=False):
     tts_text: str              # TTS용 보정 텍스트
     tts_audio: bytes           # Google TTS 반환 오디오 bytes
 
+    # ── Spring Boot Core 에서 전달받은 위치 context ──────────────────────
+    nearby_places: List[Dict[str, Any]]  # [{placeId, name, category, description, distanceM, sameZone}]
+    daily_infos: List[Dict[str, Any]]    # [{placeName, infoType, content}]
+
+    # ── struct_db / answer 결과 메타 ─────────────────────────────────────
+    place_id: Optional[int]    # 언급된 장소 ID (display hint용)
+    emotion: str               # 캐릭터 감정: GUIDING | HAPPY | THINKING | SORRY | EXCITED
+    category: str              # 질문 유형: DIRECTION | HOURS | FACILITY | HISTORY | GENERAL | ERROR
+
     # ── 디버깅 ────────────────────────────────────────────────────────────
     trace: Dict[str, Any]      # 노드별 로그/메타 기록
