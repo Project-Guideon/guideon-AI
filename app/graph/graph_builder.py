@@ -30,7 +30,7 @@ from app.graph.nodes.answer.clarify_node import make_clarify_node
 from app.graph.nodes.answer.smalltalk_node import make_smalltalk_node
 
 # ── 노드: tool ────────────────────────────────────────────────────────────────
-from app.graph.nodes.tool.struct_db_node import struct_db_node
+from app.graph.nodes.tool.struct_db_node import make_struct_db_node
 from app.graph.nodes.tool.event_node import event_node
 
 # ── 노드: output ──────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ def _register_core_nodes(builder: StateGraph, rag: PgVectorRAG, llm: OpenAILLM):
     builder.add_node("intent_gate",        make_intent_gate_node(llm))
     builder.add_node("smalltalk",          make_smalltalk_node(llm))
     builder.add_node("event",              event_node)
-    builder.add_node("struct_db",          struct_db_node)
+    builder.add_node("struct_db",          make_struct_db_node(llm))
     builder.add_node("translate_ko",       make_translate_node(llm))
 
     _retrieve = make_retrieve_node_v2(rag) if isinstance(rag, PgVectorRAG_V2) else make_retrieve_node(rag)
