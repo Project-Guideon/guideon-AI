@@ -52,7 +52,7 @@ def make_intent_gate_node(llm: OpenAILLM):
                     "                 'What was the restroom area used for historically?' → rag (learning)\n"
                     "\n"
                     "Respond ONLY with valid JSON. Example:\n"
-                    '{"ranking": ["struct_db", "rag", "event", "smalltalk"], "place_category": "RESTROOM"}\n'
+                    '{"ranking": ["struct_db", "rag", "event", "smalltalk"], "place_category": "TOILET"}\n'
                     "\n"
                     "The first item is the most likely intent. Include all 4 categories.\n"
                     "place_category: set ONLY when top intent is struct_db, otherwise null.\n"
