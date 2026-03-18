@@ -30,6 +30,7 @@ from app.graph.nodes.answer.clarify_node import make_clarify_node
 from app.graph.nodes.answer.smalltalk_node import make_smalltalk_node
 
 # ── 노드: tool ────────────────────────────────────────────────────────────────
+from app.graph.nodes.tool.fetch_places_node import fetch_places_node
 from app.graph.nodes.tool.struct_db_node import make_struct_db_node
 from app.graph.nodes.tool.event_node import event_node
 
@@ -50,6 +51,7 @@ def _register_core_nodes(builder: StateGraph, rag: PgVectorRAG, llm: OpenAILLM):
     builder.add_node("intent_gate",        make_intent_gate_node(llm))
     builder.add_node("smalltalk",          make_smalltalk_node(llm))
     builder.add_node("event",              event_node)
+    builder.add_node("fetch_places",       fetch_places_node)
     builder.add_node("struct_db",          make_struct_db_node(llm))
     builder.add_node("translate_ko",       make_translate_node(llm))
 
@@ -70,9 +72,10 @@ def _register_core_edges(builder: StateGraph, end_node: str):
     builder.add_edge("normalize", "intent_gate")
 
     # ── 비-RAG 분기 → fallback_dispatch 수렴 ──────────────────────────
-    builder.add_edge("smalltalk",  "fallback_dispatch")
-    builder.add_edge("event",      "fallback_dispatch")
-    builder.add_edge("struct_db",  "fallback_dispatch")
+    builder.add_edge("smalltalk",      "fallback_dispatch")
+    builder.add_edge("event",          "fallback_dispatch")
+    builder.add_edge("fetch_places",   "struct_db")
+    builder.add_edge("struct_db",      "fallback_dispatch")
 
     # ── RAG 파이프라인 고정 구간 ──────────────────────────────────────
     builder.add_edge("translate_ko",    "retrieve")
@@ -90,7 +93,7 @@ def _register_core_edges(builder: StateGraph, end_node: str):
         {
             "smalltalk":    "smalltalk",
             "event":        "event",
-            "struct_db":    "struct_db",
+            "struct_db":    "fetch_places",  # DB 조회 후 struct_db 로
             "retrieve":     "retrieve",      # RAG (KO)
             "translate_ko": "translate_ko",  # RAG (Foreign)
         },
@@ -114,7 +117,7 @@ def _register_core_edges(builder: StateGraph, end_node: str):
             "done":         end_node,
             "smalltalk":    "smalltalk",
             "event":        "event",
-            "struct_db":    "struct_db",
+            "struct_db":    "fetch_places",  # fallback 시에도 DB 재조회
             "retrieve":     "retrieve",
             "translate_ko": "translate_ko",
             "clarify":      "clarify",
