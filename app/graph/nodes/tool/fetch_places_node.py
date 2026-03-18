@@ -45,7 +45,12 @@ def fetch_places_node(state: GraphState) -> dict:
         )
         resp.raise_for_status()
         data = resp.json()
-        nearby_places = data if isinstance(data, list) else data.get("places", [])
+        if isinstance(data, list):
+            nearby_places = [p for p in data if isinstance(p, dict)]
+        elif isinstance(data, dict) and isinstance(data.get("places"), list):
+            nearby_places = [p for p in data["places"] if isinstance(p, dict)]
+        else:
+            nearby_places = []
 
         print(f"[fetch_places] 결과: category={place_category}, count={len(nearby_places)}")
         for p in nearby_places:
