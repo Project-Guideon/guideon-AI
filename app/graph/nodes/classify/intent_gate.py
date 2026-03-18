@@ -49,9 +49,11 @@ def make_intent_gate_node(llm: OpenAILLM):
                     "                 'What was the restroom area used for historically?' → rag (learning)\n"
                     "\n"
                     "Respond ONLY with valid JSON. Example:\n"
-                    '{"ranking": ["rag", "struct_db", "event", "smalltalk"]}\n'
+                    '{"ranking": ["struct_db", "rag", "event", "smalltalk"], "place_category": "RESTROOM"}\n'
                     "\n"
                     "The first item is the most likely intent. Include all 4 categories.\n"
+                    "place_category: set ONLY when top intent is struct_db, otherwise null.\n"
+                    "  Possible values: RESTROOM, PARKING, TICKET_BOOTH, RESTAURANT, CAFE, SHOP, GATE, BUILDING\n"
                     "DO NOT generate any answer or explanation."
                 ),
             },
@@ -64,6 +66,7 @@ def make_intent_gate_node(llm: OpenAILLM):
             raw = llm.chat(messages, max_tokens=60)
             parsed = json.loads(raw)
             ranking = parsed.get("ranking", _DEFAULT_RANKING)
+            place_category = parsed.get("place_category") or None
 
             # 유효성 검증: 4개 의도가 모두 포함되어야 함
             if not isinstance(ranking, list):
@@ -85,18 +88,22 @@ def make_intent_gate_node(llm: OpenAILLM):
                     method = "llm_partial_fix"
         except json.JSONDecodeError as e:
             ranking = _DEFAULT_RANKING
+            place_category = None
             method = "llm_fallback_invalid_json"
             error = str(e)
         except (APIConnectionError, APITimeoutError) as e:
             ranking = _DEFAULT_RANKING
+            place_category = None
             method = "llm_fallback_connection_error"
             error = str(e)
         except RateLimitError as e:
             ranking = _DEFAULT_RANKING
+            place_category = None
             method = "llm_fallback_rate_limit"
             error = str(e)
         except APIError as e:
             ranking = _DEFAULT_RANKING
+            place_category = None
             method = "llm_fallback_api_error"
             error = f"{e.__class__.__name__}: {e}"
 
@@ -107,6 +114,7 @@ def make_intent_gate_node(llm: OpenAILLM):
         trace["intent_gate"] = {
             "text": text,
             "ranking": ranking,
+            "place_category": place_category,
             "method": method,
         }
         if error:
@@ -118,6 +126,7 @@ def make_intent_gate_node(llm: OpenAILLM):
         return {
             "intent_ranking": ranking,
             "current_intent_index": 0,
+            "place_category": place_category,
             "trace": trace,
         }
 
