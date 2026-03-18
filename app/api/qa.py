@@ -96,10 +96,17 @@ async def internal_qa(req: InternalQaRequest):
     result = await asyncio.to_thread(text_pipeline.graph.invoke, initial_state)
 
     answer = result.get("answer_text", "")
-    answer_found = result.get("check_result") == "good"     #check_result가 good이면 true, bad면 false 유지
+    answer_found = result.get("check_result") == "good"
+
+    fallback_answers = {
+        "ko": "죄송합니다, 해당 정보를 찾을 수 없습니다.",
+        "en": "Sorry, I couldn't find that information.",
+        "ja": "申し訳ありませんが、その情報は見つかりませんでした。",
+        "zh": "抱歉，我没有找到相关信息。",
+    }
 
     return InternalQaResponse(
-        answer=answer if answer_found else "죄송합니다, 해당 정보를 찾을 수 없습니다.",
+        answer=answer if answer_found else fallback_answers.get(lang2, fallback_answers["en"]),
         placeId=result.get("place_id"),
         emotion=result.get("emotion") or ("GUIDING" if answer_found else "SORRY"),
         language=lang2,
