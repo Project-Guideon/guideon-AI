@@ -35,7 +35,8 @@ def fetch_places_node(state: GraphState) -> dict:
         if place_category:
             params["category"] = place_category
 
-        print(f"[fetch_places] 요청: {CORE_BASE_URL}/internal/v1/places/nearby params={params}")
+        safe_params = {k: v for k, v in params.items() if k != "deviceId"}
+        print(f"[fetch_places] 요청: {CORE_BASE_URL}/internal/v1/places/nearby params={safe_params}")
 
         resp = requests.get(
             f"{CORE_BASE_URL}/internal/v1/places/nearby",
@@ -48,7 +49,9 @@ def fetch_places_node(state: GraphState) -> dict:
 
         print(f"[fetch_places] 결과: category={place_category}, count={len(nearby_places)}")
         for p in nearby_places:
-            print(f"  - placeId={p.get('placeId')} [{p.get('name')}] category={p.get('category')} dist={p.get('distanceM'):.1f}m sameZone={p.get('sameZone')}")
+            dist = p.get("distanceM")
+            dist_text = f"{dist:.1f}m" if isinstance(dist, (int, float)) else "unknown"
+            print(f"  - placeId={p.get('placeId')} [{p.get('name')}] category={p.get('category')} dist={dist_text} sameZone={p.get('sameZone')}")
 
         trace["fetch_places"] = {
             "status": "ok",
