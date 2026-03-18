@@ -31,8 +31,8 @@ from app.graph.nodes.answer.smalltalk_node import make_smalltalk_node
 
 # ── 노드: tool ────────────────────────────────────────────────────────────────
 from app.graph.nodes.tool.fetch_places_node import fetch_places_node
-from app.graph.nodes.tool.struct_db_node import make_struct_db_node
-from app.graph.nodes.tool.event_node import event_node
+from app.graph.nodes.answer.struct_db_node import make_struct_db_node
+from app.graph.nodes.answer.event_node import event_node
 
 # ── 노드: output ──────────────────────────────────────────────────────────────
 from app.graph.nodes.output.tts_builder import make_tts_builder_node
