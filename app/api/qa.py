@@ -27,15 +27,6 @@ class DeviceLocation(BaseModel):
     longitude: float
 
 
-class NearbyPlace(BaseModel):
-    placeId: int
-    name: str
-    category: str
-    description: Optional[str] = None
-    distanceM: Optional[float] = None
-    sameZone: bool = False
-
-
 class DailyInfoSummary(BaseModel):
     placeName: str
     infoType: str
@@ -43,17 +34,18 @@ class DailyInfoSummary(BaseModel):
 
 
 class QaContext(BaseModel):
-    nearbyPlaces: List[NearbyPlace] = []
     dailyInfos: List[DailyInfoSummary] = []
 
 
 class InternalQaRequest(BaseModel):
     sessionId: str
     siteId: int
+    deviceId: str
     question: str
     language: Optional[str] = "ko"
+    systemPrompt: Optional[str] = None   # tb_mascot.system_prompt (마스코트 캐릭터 설정)
     deviceLocation: Optional[DeviceLocation] = None
-    context: Optional[QaContext] = None
+    context: Optional[QaContext] = None  # dailyInfos 전달용
 
 
 class InternalQaResponse(BaseModel):
@@ -78,10 +70,8 @@ async def internal_qa(req: InternalQaRequest):
     """
     lang2 = (req.language or "ko").split("-")[0].lower()
 
-    nearby_places = []
     daily_infos = []
     if req.context:
-        nearby_places = [p.model_dump() for p in req.context.nearbyPlaces]
         daily_infos = [d.model_dump() for d in req.context.dailyInfos]
 
     initial_state = {
@@ -89,11 +79,14 @@ async def internal_qa(req: InternalQaRequest):
         "language_code": lang2,
         "user_language": lang2,
         "site_id": req.siteId,
+        "device_id": req.deviceId,
+        "system_prompt": req.systemPrompt or "",
         "top_k": 5,
         "retry_count": 0,
         "trace": {},
-        "nearby_places": nearby_places,
+        "nearby_places": [],        # fetch_places_node 가 채움
         "daily_infos": daily_infos,
+        "place_category": None,
         # struct_db_node 결과를 받기 위해 초기화
         "place_id": None,
         "emotion": "",
