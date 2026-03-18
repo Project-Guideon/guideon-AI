@@ -23,6 +23,7 @@ def make_struct_db_node(llm: OpenAILLM):
         text: str = state.get("normalized_text", "")
         user_language: str = state.get("user_language", "ko")
         nearby_places: List[Dict[str, Any]] = state.get("nearby_places") or []
+        system_prompt: str = state.get("system_prompt") or ""
 
         trace = dict(state.get("trace") or {})
         flow = list(trace.get("_flow") or [])
@@ -54,11 +55,14 @@ def make_struct_db_node(llm: OpenAILLM):
             "ja": "日本語で答えてください。",
         }.get(user_language, "Answer in the same language as the question.")
 
+        character_instruction = f"\n{system_prompt}" if system_prompt else ""
+
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You are a friendly guide at a tourist attraction.\n"
+                    "You are a friendly guide at a tourist attraction."
+                    f"{character_instruction}\n"
                     "Based on the nearby places list, answer the user's location/direction question.\n"
                     "Prioritize places marked '✓ 같은 구역' (same zone) and shorter distances.\n"
                     f"{lang_instruction}\n"
