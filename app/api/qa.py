@@ -102,7 +102,7 @@ async def internal_qa(req: InternalQaRequest):
         "ko": "죄송합니다, 해당 정보를 찾을 수 없습니다.",
         "en": "Sorry, I couldn't find that information.",
         "ja": "申し訳ありませんが、その情報は見つかりませんでした。",
-        "zh": "抱歉，我没有找到相关信息。",
+        "zh": "抱歉, 我没有找到相关信息。",
     }
 
     return InternalQaResponse(
