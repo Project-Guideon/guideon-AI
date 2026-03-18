@@ -40,7 +40,7 @@ def make_struct_db_node(llm: OpenAILLM):
         for p in nearby_places:
             same = "✓ 같은 구역" if p.get("sameZone") else "다른 구역"
             dist = p.get("distanceM")
-            dist_str = f"{dist:.0f}m" if dist is not None else "거리 미상"
+            dist_str = f"{dist:.0f}m" if isinstance(dist, (int, float)) else "거리 미상"
             desc = p.get("description") or ""
             places_lines.append(
                 f"- placeId={p.get('placeId')} [{p.get('name')}] "
@@ -94,14 +94,23 @@ def make_struct_db_node(llm: OpenAILLM):
         try:
             raw = llm.chat(messages, max_tokens=200)
             parsed = json.loads(raw)
+            if not isinstance(parsed, dict):
+                raise ValueError("LLM response must be a JSON object")
             answer_text = parsed.get("answer", "") if isinstance(parsed.get("answer"), str) else ""
             raw_place_id = parsed.get("place_id")
-            place_id = int(raw_place_id) if isinstance(raw_place_id, (int, float)) and raw_place_id else None
+            if isinstance(raw_place_id, bool) or raw_place_id is None:
+                place_id = None
+            elif isinstance(raw_place_id, int):
+                place_id = raw_place_id
+            elif isinstance(raw_place_id, float) and raw_place_id.is_integer():
+                place_id = int(raw_place_id)
+            else:
+                place_id = None
             raw_emotion = parsed.get("emotion", "GUIDING")
             emotion = raw_emotion if raw_emotion in _allowed_emotions else "GUIDING"
             raw_category = parsed.get("category", "DIRECTION")
             category = raw_category if raw_category in _allowed_categories else "DIRECTION"
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
             # JSON 파싱 실패 → raw 자체를 답변으로 사용
             answer_text = raw
             method = "llm_raw_fallback"
