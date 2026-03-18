@@ -38,6 +38,13 @@ class GraphState(TypedDict, total=False):
     tts_text: str              # TTS용 보정 텍스트
     tts_audio: bytes           # Google TTS 반환 오디오 bytes
 
+    # ── 요청 디바이스 / 마스코트 정보 ────────────────────────────────────
+    device_id: str                  # 디바이스 ID (fetch_places_node가 Spring Boot places API 호출 시 사용)
+    system_prompt: str              # 마스코트 캐릭터 프롬프트 (tb_mascot.system_prompt)
+
+    # ── intent_gate 추출 결과 ────────────────────────────────────────────
+    place_category: Optional[str]   # struct_db 라우트일 때 추출된 장소 카테고리 (ex: RESTROOM, PARKING)
+
     # ── Spring Boot Core 에서 전달받은 위치 context ──────────────────────
     nearby_places: List[Dict[str, Any]]  # [{placeId, name, category, description, distanceM, sameZone}]
     daily_infos: List[Dict[str, Any]]    # [{placeName, infoType, content}]
