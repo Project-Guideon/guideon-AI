@@ -10,6 +10,9 @@ from app.graph.state import GraphState
 _ALLOWED_INTENTS = {"rag", "smalltalk", "event", "struct_db"}
 _DEFAULT_RANKING = ["rag","struct_db", "smalltalk", "event"]
 _MAX_INTENTS = 2  # 상위 N개 의도만 시도 (1~4)
+_ALLOWED_PLACE_CATEGORIES = {
+    "TOILET", "TICKET", "RESTAURANT", "SHOP", "INFO", "ATTRACTION", "PARKING", "OTHER"
+}
 
 
 def make_intent_gate_node(llm: OpenAILLM):
@@ -49,9 +52,11 @@ def make_intent_gate_node(llm: OpenAILLM):
                     "                 'What was the restroom area used for historically?' → rag (learning)\n"
                     "\n"
                     "Respond ONLY with valid JSON. Example:\n"
-                    '{"ranking": ["rag", "struct_db", "event", "smalltalk"]}\n'
+                    '{"ranking": ["struct_db", "rag", "event", "smalltalk"], "place_category": "TOILET"}\n'
                     "\n"
                     "The first item is the most likely intent. Include all 4 categories.\n"
+                    "place_category: set ONLY when top intent is struct_db, otherwise null.\n"
+                    "  Possible values: TOILET, TICKET, RESTAURANT, SHOP, INFO, ATTRACTION, PARKING, OTHER\n"
                     "DO NOT generate any answer or explanation."
                 ),
             },
@@ -64,6 +69,13 @@ def make_intent_gate_node(llm: OpenAILLM):
             raw = llm.chat(messages, max_tokens=60)
             parsed = json.loads(raw)
             ranking = parsed.get("ranking", _DEFAULT_RANKING)
+            # 1순위가 struct_db일 때만 place_category 적용, 허용 enum 외 값은 None
+            raw_category = parsed.get("place_category")
+            place_category = (
+                raw_category.upper()
+                if isinstance(raw_category, str) and raw_category.upper() in _ALLOWED_PLACE_CATEGORIES
+                else None
+            )
 
             # 유효성 검증: 4개 의도가 모두 포함되어야 함
             if not isinstance(ranking, list):
@@ -85,18 +97,22 @@ def make_intent_gate_node(llm: OpenAILLM):
                     method = "llm_partial_fix"
         except json.JSONDecodeError as e:
             ranking = _DEFAULT_RANKING
+            place_category = None
             method = "llm_fallback_invalid_json"
             error = str(e)
         except (APIConnectionError, APITimeoutError) as e:
             ranking = _DEFAULT_RANKING
+            place_category = None
             method = "llm_fallback_connection_error"
             error = str(e)
         except RateLimitError as e:
             ranking = _DEFAULT_RANKING
+            place_category = None
             method = "llm_fallback_rate_limit"
             error = str(e)
         except APIError as e:
             ranking = _DEFAULT_RANKING
+            place_category = None
             method = "llm_fallback_api_error"
             error = f"{e.__class__.__name__}: {e}"
 
@@ -107,6 +123,7 @@ def make_intent_gate_node(llm: OpenAILLM):
         trace["intent_gate"] = {
             "text": text,
             "ranking": ranking,
+            "place_category": place_category,
             "method": method,
         }
         if error:
@@ -115,9 +132,14 @@ def make_intent_gate_node(llm: OpenAILLM):
         # 상위 N개 의도만 시도
         ranking = ranking[:_MAX_INTENTS]
 
+        # 1순위가 struct_db가 아니면 place_category 무효화
+        if ranking[0] != "struct_db":
+            place_category = None
+
         return {
             "intent_ranking": ranking,
             "current_intent_index": 0,
+            "place_category": place_category,
             "trace": trace,
         }
 
