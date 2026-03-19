@@ -13,7 +13,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import Response, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.core.dependencies import traced_voice_run, traced_text_run, text_pipeline
 
@@ -33,11 +33,21 @@ class DailyInfoSummary(BaseModel):
     content: str
 
 
+class MascotPromptConfig(BaseModel):
+    base_persona: Optional[str] = None
+    smalltalk_style: Optional[str] = None
+    event_node_style: Optional[str] = None
+    RAG_style: Optional[str] = None
+    struct_db_style: Optional[str] = None
+
+
 class QaContext(BaseModel):
     dailyInfos: List[DailyInfoSummary] = []
 
 
 class InternalQaRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     sessionId: str
     siteId: int
     deviceId: str
@@ -46,6 +56,10 @@ class InternalQaRequest(BaseModel):
     systemPrompt: Optional[str] = None   # tb_mascot.system_prompt (마스코트 캐릭터 설정)
     deviceLocation: Optional[DeviceLocation] = None
     context: Optional[QaContext] = None  # dailyInfos 전달용
+    # 마스코트 개성 필드 (Spring JSON "name" → Python .mascotName)
+    mascotName: Optional[str] = Field(None, alias="name")
+    greetingMsg: Optional[str] = None
+    promptConfig: Optional[MascotPromptConfig] = None
 
 
 class InternalQaResponse(BaseModel):
@@ -81,6 +95,13 @@ async def internal_qa(req: InternalQaRequest):
         "site_id": req.siteId,
         "device_id": req.deviceId,
         "system_prompt": req.systemPrompt or "",
+        "mascot_name":            req.mascotName or "",
+        "mascot_greeting":        req.greetingMsg or "",
+        "mascot_base_persona":    (req.promptConfig.base_persona or "") if req.promptConfig else "",
+        "mascot_smalltalk_style": (req.promptConfig.smalltalk_style or "") if req.promptConfig else "",
+        "mascot_struct_db_style": (req.promptConfig.struct_db_style or "") if req.promptConfig else "",
+        "mascot_RAG_style":       (req.promptConfig.RAG_style or "") if req.promptConfig else "",
+        "mascot_event_style":     (req.promptConfig.event_node_style or "") if req.promptConfig else "",
         "top_k": 5,
         "retry_count": 0,
         "trace": {},
