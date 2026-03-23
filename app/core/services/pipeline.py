@@ -31,9 +31,15 @@ class TextPipeline:
     def __init__(self, rag: PgVectorRAG, llm: OpenAILLM):
         self.graph = build_text_graph(rag=rag, llm=llm)
 
-    def run(self, query: str, site_id: int = 1, language_code: str = "ko") -> TextQAResult:
+    def run(
+        self,
+        query: str,
+        site_id: int = 1,
+        language_code: str = "ko",
+        mascot: Dict[str, Any] | None = None,
+    ) -> TextQAResult:
         lang2 = language_code.split("-")[0].lower()  # "ko-KR" → "ko"
-        initial_state = {
+        initial_state: Dict[str, Any] = {
             "transcript": query,        # STT 결과 대신 텍스트를 직접 주입
             "language_code": lang2,
             "user_language": lang2,
@@ -42,6 +48,8 @@ class TextPipeline:
             "retry_count": 0,
             "trace": {},
         }
+        if mascot:
+            initial_state.update(mascot)
         result = self.graph.invoke(initial_state)
         return TextQAResult(
             query=query,
@@ -56,15 +64,22 @@ class VoicePipeline:
         # 서비스를 직접 보관하는 대신 LangGraph 그래프로 조립
         self.graph = build_graph(stt=stt, rag=rag, llm=llm, tts=tts)
 
-    def run(self, audio_bytes: bytes, site_id: int = 1) -> VoiceQAResult:
+    def run(
+        self,
+        audio_bytes: bytes,
+        site_id: int = 1,
+        mascot: Dict[str, Any] | None = None,
+    ) -> VoiceQAResult:
         # top_k / retry_count 는 그래프 내부(answer_check)에서 동적으로 관리
-        initial_state = {
+        initial_state: Dict[str, Any] = {
             "audio": audio_bytes,
             "site_id": site_id,
             "top_k": 5,
             "retry_count": 0,
             "trace": {},
         }
+        if mascot:
+            initial_state.update(mascot)
 
         result = self.graph.invoke(initial_state)
 
