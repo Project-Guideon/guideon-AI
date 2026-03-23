@@ -11,9 +11,9 @@ QA 엔드포인트
 import asyncio
 from typing import List, Optional
 
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import Response, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.core.dependencies import traced_voice_run, traced_text_run, text_pipeline
 
@@ -33,11 +33,21 @@ class DailyInfoSummary(BaseModel):
     content: str
 
 
+class MascotPromptConfig(BaseModel):
+    base_persona: Optional[str] = None
+    smalltalk_style: Optional[str] = None
+    event_node_style: Optional[str] = None
+    RAG_style: Optional[str] = None
+    struct_db_style: Optional[str] = None
+
+
 class QaContext(BaseModel):
     dailyInfos: List[DailyInfoSummary] = []
 
 
 class InternalQaRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     sessionId: str
     siteId: int
     deviceId: str
@@ -46,6 +56,10 @@ class InternalQaRequest(BaseModel):
     systemPrompt: Optional[str] = None   # tb_mascot.system_prompt (마스코트 캐릭터 설정)
     deviceLocation: Optional[DeviceLocation] = None
     context: Optional[QaContext] = None  # dailyInfos 전달용
+    # 마스코트 개성 필드 (Spring JSON "name" → Python .mascotName)
+    mascotName: Optional[str] = Field(None, alias="name")
+    greetingMsg: Optional[str] = None
+    promptConfig: Optional[MascotPromptConfig] = None
 
 
 class InternalQaResponse(BaseModel):
@@ -81,6 +95,13 @@ async def internal_qa(req: InternalQaRequest):
         "site_id": req.siteId,
         "device_id": req.deviceId,
         "system_prompt": req.systemPrompt or "",
+        "mascot_name":            req.mascotName or "",
+        "mascot_greeting":        req.greetingMsg or "",
+        "mascot_base_persona":    (req.promptConfig.base_persona or "") if req.promptConfig else "",
+        "mascot_smalltalk_style": (req.promptConfig.smalltalk_style or "") if req.promptConfig else "",
+        "mascot_struct_db_style": (req.promptConfig.struct_db_style or "") if req.promptConfig else "",
+        "mascot_RAG_style":       (req.promptConfig.RAG_style or "") if req.promptConfig else "",
+        "mascot_event_style":     (req.promptConfig.event_node_style or "") if req.promptConfig else "",
         "top_k": 5,
         "retry_count": 0,
         "trace": {},
@@ -116,9 +137,33 @@ async def internal_qa(req: InternalQaRequest):
 
 
 @router.post("/voice_qa")
-async def voice_qa(audio: UploadFile = File(...), site_id: int = 1):
+async def voice_qa(
+    audio: UploadFile = File(...),
+    site_id: int = Form(1),
+    # 테스트용 mascot 필드 (internal/v1/qa와 동일한 구조, Form으로 전달)
+    system_prompt: Optional[str] = Form(None),
+    mascot_name: Optional[str] = Form(None),
+    mascot_greeting: Optional[str] = Form(None),
+    mascot_base_persona: Optional[str] = Form(None),
+    mascot_smalltalk_style: Optional[str] = Form(None),
+    mascot_struct_db_style: Optional[str] = Form(None),
+    mascot_RAG_style: Optional[str] = Form(None),
+    mascot_event_style: Optional[str] = Form(None),
+):
     audio_bytes = await audio.read()
-    result = await asyncio.to_thread(traced_voice_run, audio_bytes, site_id)
+    mascot = _build_mascot_dict(
+        system_prompt=system_prompt,
+        mascot_name=mascot_name,
+        mascot_greeting=mascot_greeting,
+        prompt_config=MascotPromptConfig(
+            base_persona=mascot_base_persona,
+            smalltalk_style=mascot_smalltalk_style,
+            struct_db_style=mascot_struct_db_style,
+            RAG_style=mascot_RAG_style,
+            event_node_style=mascot_event_style,
+        ),
+    )
+    result = await asyncio.to_thread(traced_voice_run, audio_bytes, site_id, mascot)
     return Response(
         content=result.voice_bytes,
         media_type="audio/mpeg",
@@ -130,9 +175,39 @@ class TextQARequest(BaseModel):
     query: str
     site_id: int = 1
     language_code: str = "ko-KR"
+    # 테스트용 mascot 필드 (internal/v1/qa와 동일한 구조)
+    system_prompt: Optional[str] = None
+    mascot_name: Optional[str] = None
+    mascot_greeting: Optional[str] = None
+    prompt_config: Optional[MascotPromptConfig] = None
+
+
+def _build_mascot_dict(
+    system_prompt: Optional[str],
+    mascot_name: Optional[str],
+    mascot_greeting: Optional[str],
+    prompt_config: Optional[MascotPromptConfig],
+) -> dict:
+    """mascot 관련 필드를 GraphState 키 형태로 변환."""
+    pc = prompt_config
+    return {
+        "system_prompt":          system_prompt or "",
+        "mascot_name":            mascot_name or "",
+        "mascot_greeting":        mascot_greeting or "",
+        "mascot_base_persona":    (pc.base_persona or "") if pc else "",
+        "mascot_smalltalk_style": (pc.smalltalk_style or "") if pc else "",
+        "mascot_struct_db_style": (pc.struct_db_style or "") if pc else "",
+        "mascot_RAG_style":       (pc.RAG_style or "") if pc else "",
+        "mascot_event_style":     (pc.event_node_style or "") if pc else "",
+    }
 
 
 @router.post("/text_qa")
 async def text_qa(req: TextQARequest):
-    result = await asyncio.to_thread(traced_text_run, req.query, req.site_id, req.language_code)
+    mascot = _build_mascot_dict(
+        req.system_prompt, req.mascot_name, req.mascot_greeting, req.prompt_config
+    )
+    result = await asyncio.to_thread(
+        traced_text_run, req.query, req.site_id, req.language_code, mascot
+    )
     return JSONResponse({"query": result.query, "answer": result.answer})

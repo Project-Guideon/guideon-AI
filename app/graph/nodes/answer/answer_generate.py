@@ -65,10 +65,29 @@ def make_answer_generate_node(llm: OpenAILLM):
             f"[문서 {i + 1}]\n{c['content']}" for i, c in enumerate(chunks)
         )
 
+        # ── 마스코트 prefix 조립 ────────────────────────────────────────
+        system_prompt_base: str = state.get("system_prompt") or ""
+        RAG_style: str = (
+            state.get("mascot_RAG_style")
+            or state.get("mascot_base_persona")
+            or ""
+        )
+        mascot_lines = []
+        if system_prompt_base:
+            mascot_lines.append(system_prompt_base)
+        if RAG_style:
+            mascot_lines.append(f"답변 스타일: {RAG_style}")
+        mascot_prefix = "\n".join(mascot_lines) + "\n" if mascot_lines else ""
+
+        # mascot 없을 때만 하드코딩 persona 표시 (있으면 mascot_prefix가 담당)
+        fallback_persona_ko = "" if mascot_prefix else "당신은 관광 안내 음성 도우미입니다.\n"
+        fallback_persona_foreign = "" if mascot_prefix else "You are a tourism guide voice assistant.\n"
+
         # ── 프롬프트 분기 (KO / Foreign) ───────────────────────────────
         if user_language == "ko":
             system_prompt = (
-                "당신은 관광 안내 음성 도우미입니다.\n"
+                f"{mascot_prefix}"
+                f"{fallback_persona_ko}"
                 "제공된 참고 정보(context)만 근거로 답변하세요.\n"
                 "규칙:\n"
                 "  - 한국어로 2~5문장, 음성으로 읽기 좋게 자연스럽게 작성\n"
@@ -84,7 +103,8 @@ def make_answer_generate_node(llm: OpenAILLM):
         else:
             lang_name = _LANG_NAMES.get(user_language, user_language.upper())
             system_prompt = (
-                f"You are a tourism guide voice assistant.\n"
+                f"{mascot_prefix}"
+                f"{fallback_persona_foreign}"
                 f"Answer in {lang_name} using the Korean reference documents provided.\n"
                 "Rules:\n"
                 f"  - Respond in {lang_name}, 2-5 sentences, natural for speech\n"

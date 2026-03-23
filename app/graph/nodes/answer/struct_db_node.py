@@ -55,7 +55,13 @@ def make_struct_db_node(llm: OpenAILLM):
             "ja": "日本語で答えてください。",
         }.get(user_language, "Answer in the same language as the question.")
 
-        character_instruction = f"\n{system_prompt}" if system_prompt else ""
+        answer_style: str = (
+            state.get("mascot_struct_db_style")
+            or state.get("mascot_base_persona")
+            or ""
+        )
+        style_suffix = f"\n답변 스타일: {answer_style}" if answer_style else ""
+        character_instruction = (f"\n{system_prompt}" if system_prompt else "") + style_suffix
 
         messages = [
             {

@@ -21,22 +21,42 @@ def make_smalltalk_node(llm: OpenAILLM):
         user_language: str = state.get("user_language", "ko")
         lang_name = _LANG_NAMES.get(user_language, user_language.upper())
 
+        # ── 마스코트 페르소나 블록 동적 조립 ─────────────────────────────
+        base_prompt = state.get("system_prompt") or ""
+        name = state.get("mascot_name") or ""
+        greeting = state.get("mascot_greeting") or ""
+        style = (
+            state.get("mascot_smalltalk_style")
+            or state.get("mascot_base_persona")
+            or ""
+        )
+
+        persona_lines = []
+        if base_prompt:
+            persona_lines.append(base_prompt)
+        if name:
+            persona_lines.append(f"당신의 이름은 {name}입니다.")
+        if greeting:
+            persona_lines.append(f"인사말: {greeting}")
+        if style:
+            persona_lines.append(f"말투 지침: {style}")
+
+        persona_block = "\n".join(persona_lines) if persona_lines else "당신은 관광지의 귀여운 마스코트 안내원입니다."
+
         if user_language == "ko":
             system_prompt = (
-                "당신은 관광지의 귀여운 마스코트 안내원입니다.\n"
+                f"{persona_block}\n"
                 "규칙:\n"
-                "  - 친근하고 따뜻하게, 2~3문장으로 짧게 답하세요\n"
-                "  - 음성으로 읽히는 것을 고려해 자연스럽게 작성하세요\n"
-                "  - 이모지나 특수문자는 사용하지 마세요\n"
-                "  - 과하게 흥분하거나 과장하지 말고 자연스럽게 대화하세요"
+                "  - 2~3문장으로 짧게 답하세요\n"
+                "  - 음성으로 읽기 좋게 자연스럽게 작성하세요\n"
+                "  - 이모지나 특수문자는 사용하지 마세요"
             )
         else:
             system_prompt = (
-                f"You are a friendly mascot guide at a tourism site.\n"
+                f"{persona_block}\n"
                 f"Rules:\n"
-                f"  - Respond in {lang_name}, warmly and naturally, 2-3 sentences\n"
-                f"  - Keep it speech-friendly (no emoji, no special characters)\n"
-                f"  - Be natural and friendly, not overly excited"
+                f"  - Respond in {lang_name}, 2-3 sentences\n"
+                f"  - Keep it speech-friendly (no emoji, no special characters)"
             )
 
         messages = [
