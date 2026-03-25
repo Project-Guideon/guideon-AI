@@ -38,5 +38,28 @@ class GraphState(TypedDict, total=False):
     tts_text: str              # TTS용 보정 텍스트
     tts_audio: bytes           # Google TTS 반환 오디오 bytes
 
+    # ── 요청 디바이스 / 마스코트 정보 ────────────────────────────────────
+    device_id: str                  # 디바이스 ID (fetch_places_node가 Spring Boot places API 호출 시 사용)
+    system_prompt: str              # 마스코트 캐릭터 프롬프트 (tb_mascot.system_prompt)
+    mascot_name: str                # 마스코트 이름 (예: "가온이")
+    mascot_greeting: str            # 인사말 (smalltalk 참고용)
+    mascot_base_persona: str        # 공통 fallback 페르소나 (각 style 비어있을 때 사용)
+    mascot_smalltalk_style: str     # 일상대화 말투 지침
+    mascot_struct_db_style: str     # 위치 안내 스타일
+    mascot_RAG_style: str           # RAG 답변 스타일
+    mascot_event_style: str         # 이벤트/운영정보 스타일
+
+    # ── intent_gate 추출 결과 ────────────────────────────────────────────
+    place_category: Optional[str]   # struct_db 라우트일 때 추출된 장소 카테고리 (ex: RESTROOM, PARKING)
+
+    # ── Spring Boot Core 에서 전달받은 위치 context ──────────────────────
+    nearby_places: List[Dict[str, Any]]  # [{placeId, name, category, description, distanceM, sameZone}]
+    daily_infos: List[Dict[str, Any]]    # [{placeName, infoType, content}]
+
+    # ── struct_db / answer 결과 메타 ─────────────────────────────────────
+    place_id: Optional[int]    # 언급된 장소 ID (display hint용)
+    emotion: str               # 캐릭터 감정: GUIDING | HAPPY | THINKING | SORRY | EXCITED
+    category: str              # 질문 유형: DIRECTION | HOURS | FACILITY | HISTORY | GENERAL | ERROR
+
     # ── 디버깅 ────────────────────────────────────────────────────────────
     trace: Dict[str, Any]      # 노드별 로그/메타 기록

@@ -34,10 +34,10 @@ text_pipeline = TextPipeline(rag=rag, llm=llm)
 streaming_pipeline = StreamingVoicePipeline(stt=stt, rag=rag, llm=llm, tts=tts)
 
 @traceable(name="voice_qa_pipeline")
-def traced_voice_run(audio_bytes: bytes, site_id: int):
-    return pipeline.run(audio_bytes, site_id=site_id)
+def traced_voice_run(audio_bytes: bytes, site_id: int, mascot: dict | None = None):
+    return pipeline.run(audio_bytes, site_id=site_id, mascot=mascot)
 
 
 @traceable(name="text_qa_pipeline")
-def traced_text_run(query: str, site_id: int, language_code: str):
-    return text_pipeline.run(query=query, site_id=site_id, language_code=language_code)
+def traced_text_run(query: str, site_id: int, language_code: str, mascot: dict | None = None):
+    return text_pipeline.run(query=query, site_id=site_id, language_code=language_code, mascot=mascot)
