@@ -97,6 +97,14 @@ async def audio_receiver(
       - text: {"type":"stop"} 같은 control
       - bytes: PCM chunk
     """
+    sentinel_sent = False
+
+    async def close_audio_q():
+        nonlocal sentinel_sent
+        if not sentinel_sent:
+            sentinel_sent = True
+            await audio_q.put(None)
+
     try:
         while True:
             msg = await websocket.receive()
@@ -105,7 +113,7 @@ async def audio_receiver(
                 data = json.loads(msg["text"])
                 if data.get("type") == "stop":
                     timing["stop_received_at"] = time.perf_counter()
-                    await audio_q.put(None)
+                    await close_audio_q()
                     break
                 continue
 
@@ -116,7 +124,10 @@ async def audio_receiver(
                 await audio_q.put(msg["bytes"])
 
     except WebSocketDisconnect:
-        await audio_q.put(None)
+        await close_audio_q()
+    except Exception:
+        await close_audio_q()
+        raise
 
 
 async def send_tts_chunks(
