@@ -51,6 +51,7 @@ def _register_core_nodes(builder: StateGraph, rag: PgVectorRAG, llm: OpenAILLM):
     builder.add_node("intent_gate",        make_intent_gate_node(llm))
     builder.add_node("smalltalk",          make_smalltalk_node(llm))
     builder.add_node("event",              make_event_node(llm))
+
     builder.add_node("fetch_places",       fetch_places_node)
     builder.add_node("struct_db",          make_struct_db_node(llm))
     builder.add_node("translate_ko",       make_translate_node(llm))
