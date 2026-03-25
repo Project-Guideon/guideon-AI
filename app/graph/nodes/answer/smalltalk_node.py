@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.core.services.llm_openai import OpenAILLM
 from app.graph.state import GraphState
-
+'''아직 구현 안되어 있어요'''
 _LANG_NAMES = {
     "ko": "Korean", "en": "English", "zh": "Chinese",
     "ja": "Japanese", "fr": "French", "es": "Spanish",

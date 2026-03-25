@@ -1,6 +1,6 @@
 """
 WebSocket 스트리밍 엔드포인트
-- WS /ws/stream : 오디오 스트림 수신 → STT → LLM → (선택) TTS 스트리밍 응답
+- WS /ws/stream : 오디오 스트림 수신 → STT → LLM → TTS 스트리밍 응답
 """
 from __future__ import annotations
 
