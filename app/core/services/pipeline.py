@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
+import asyncio
 
 from app.core.services.llm_openai import OpenAILLM
 from app.core.services.rag_pgvector import PgVectorRAG
@@ -134,5 +135,13 @@ class StreamingVoicePipeline:
         sentence_split_re = re.compile(r'(?<=[.!?])\s+|(?<=다\.)\s*|(?<=요\.)\s*|(?<=니다\.)\s*')
         return [s.strip() for s in sentence_split_re.split(answer_text) if s and s.strip()]
 
-    def synthesize_sentence(self, sentence: str) -> bytes:
-        return self.tts.synthesize(sentence)
+    async def synthesize_sentence(
+        self,
+        sentence: str,
+        language_code: str | None = None,
+    ) -> bytes:
+        return await asyncio.to_thread(
+            self.tts.synthesize,
+            text=sentence,
+            language_code=language_code,
+        )
