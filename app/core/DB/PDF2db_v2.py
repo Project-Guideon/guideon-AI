@@ -197,6 +197,9 @@ def generate_search_summary(
     Returns:
         {"summary": "...", "keywords": ["...", ...]}
     """
+    import re
+    content = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', content)
+    section_title = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', section_title)
     system_prompt = (
         "당신은 관광 안내 문서의 검색 최적화 전문가입니다.\n"
         "주어진 텍스트를 분석하여 검색에 최적화된 요약과 키워드를 생성하세요.\n"
