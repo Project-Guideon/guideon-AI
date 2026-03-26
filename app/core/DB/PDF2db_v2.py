@@ -24,7 +24,7 @@ import os
 from openai import OpenAI
 
 MODEL_NAME = "text-embedding-3-small"
-SUMMARY_MODEL_NAME = "gpt-4o"
+SUMMARY_MODEL_NAME = "gpt-5-mini"
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ── 1) PDF → 마크다운 변환 ──────────────────────────────────────────────────
@@ -190,7 +190,7 @@ def parse_markdown_sections(
 def generate_search_summary(
     content: str,
     section_title: str,
-    model: str = "gpt-4o",
+    model: str = "gpt-5-mini",
 ) -> Dict[str, Any]:
     """GPT로 검색용 요약 + 키워드를 생성.
 
@@ -231,8 +231,9 @@ def generate_search_summary(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.1,
-        max_tokens=500,
+        #temperature=0.1, temperature 지원안함 
+        #max_tokens=500, gpt-5-mini는 max_tokens 대신 max_completion_tokens 사용
+        #max_completion_tokens=4000, #질문도 포함해서 4096 토큰까지 지원하므로 알아서 설정하게
         response_format={"type": "json_object"},
     )
 
