@@ -198,8 +198,13 @@ def generate_search_summary(
         {"summary": "...", "keywords": ["...", ...]}
     """
     import re
-    content = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', content)
-    section_title = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', section_title)
+    
+    safe_content = content if content is not None else ""
+    safe_title = section_title if section_title is not None else "(없음)"
+    
+    
+    content = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', safe_content)
+    section_title = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', safe_title)
     system_prompt = (
         "당신은 관광 안내 문서의 검색 최적화 전문가입니다.\n"
         "주어진 텍스트를 분석하여 검색에 최적화된 요약과 키워드를 생성하세요.\n"
