@@ -25,4 +25,5 @@ google-credentials.json
 # audio files
 *.wav
 *.mp3
-API_SPEC.md
+*.md
+!README.md
