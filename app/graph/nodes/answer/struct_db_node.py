@@ -48,41 +48,53 @@ def make_struct_db_node(llm: OpenAILLM):
             )
         places_text = "\n".join(places_lines)
 
-        lang_instruction = {
-            "ko": "한국어로 답변하세요.",
-            "en": "Answer in English.",
-            "zh": "请用中文回答。",
-            "ja": "日本語で答えてください。",
-        }.get(user_language, "Answer in the same language as the question.")
+        # ── 마스코트 페르소나 블록 조립 ─────────────────────────────
+        style = state.get("mascot_struct_db_style") or ""
+        name = state.get("mascot_name") or ""
 
-        answer_style: str = (
-            state.get("mascot_struct_db_style")
-            or state.get("mascot_base_persona")
-            or ""
-        )
-        style_suffix = f"\n답변 스타일: {answer_style}" if answer_style else ""
-        character_instruction = (f"\n{system_prompt}" if system_prompt else "") + style_suffix
+        persona_lines = []
+        if system_prompt:
+            persona_lines.append(system_prompt)
+        if name:
+            persona_lines.append(f"당신의 이름은 {name}입니다.")
+        if style:
+            persona_lines.append(f"말투 지침: {style}")
+
+        persona_block = "\n".join(persona_lines) if persona_lines else "당신은 관광지의 친절한 위치 안내원입니다."
+
+        if user_language == "ko":
+            system_msg = (
+                f"{persona_block}\n"
+                "규칙:\n"
+                "  - 아래 장소 목록만 참고하세요 (장소를 지어내지 마세요)\n"
+                "  - 같은 구역(✓ 같은 구역) 장소를 우선, 가까운 순서로 안내하세요\n"
+                "  - 장소 이름과 거리를 포함해 1~2문장으로 답하세요\n"
+                "  - 이모지나 특수문자는 사용하지 마세요\n\n"
+                f"주변 장소 목록:\n{places_text}\n\n"
+                "반드시 아래 JSON 형식으로만 응답하세요 (마크다운 없이):\n"
+                '{"answer": "자연어 답변", "place_id": <placeId 또는 null>, '
+                '"emotion": "GUIDING", "category": "DIRECTION"}'
+            )
+        else:
+            lang_name = {"en": "English", "zh": "Chinese", "ja": "Japanese"}.get(
+                user_language, user_language.upper()
+            )
+            system_msg = (
+                f"{persona_block}\n"
+                "Rules:\n"
+                f"  - Respond in {lang_name}, 1-2 sentences\n"
+                "  - Use ONLY the provided nearby places list (do not invent places)\n"
+                "  - Prioritize same-zone (✓ 같은 구역) places and shorter distances\n"
+                "  - Mention the place name and distance\n"
+                "  - No emoji, no special characters\n\n"
+                f"Nearby places:\n{places_text}\n\n"
+                "Return ONLY valid JSON (no markdown):\n"
+                '{"answer": "...", "place_id": <placeId or null>, '
+                '"emotion": "GUIDING", "category": "DIRECTION"}'
+            )
 
         messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a friendly guide at a tourist attraction."
-                    f"{character_instruction}\n"
-                    "Based on the nearby places list, answer the user's location/direction question.\n"
-                    "Prioritize places marked '✓ 같은 구역' (same zone) and shorter distances.\n"
-                    f"{lang_instruction}\n"
-                    "Be concise and friendly. Mention the place name and distance.\n\n"
-                    f"Nearby places:\n{places_text}\n\n"
-                    "Respond ONLY with valid JSON (no markdown, no extra text):\n"
-                    "{\n"
-                    '  "answer": "자연어 답변 (1~2문장)",\n'
-                    '  "place_id": <가장 관련 있는 placeId (int) 또는 null>,\n'
-                    '  "emotion": "GUIDING",\n'
-                    '  "category": "DIRECTION"\n'
-                    "}"
-                ),
-            },
+            {"role": "system", "content": system_msg},
             {"role": "user", "content": text},
         ]
 
