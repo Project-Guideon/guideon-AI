@@ -1,20 +1,21 @@
 """
 WebSocket 스트리밍 엔드포인트
-- WS /ws/stream : 오디오 스트림 수신 → STT → LLM → TTS 스트리밍 응답
+- WS /ws/stream : 오디오 스트림 수신 → STT → text_qa와 동일한 LangGraph 파이프라인 → TTS 스트리밍 응답
 """
 from __future__ import annotations
 
 import asyncio
 import base64
 import json
+import re
 import time
 import uuid
-from typing import Optional, AsyncIterator
+from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from langsmith import trace as ls_trace, traceable
 
-from app.core.dependencies import stt, tts, rag, llm, traced_text_run
+from app.core.dependencies import stt, tts, traced_text_run
 
 router = APIRouter()
 
@@ -24,9 +25,6 @@ def _new_trace_id() -> str:
 
 
 def map_tts_language(lang2: str) -> str:
-    """
-    STT 결과(ko/en/ja/zh 등)를 Google TTS용 BCP-47 코드로 변환
-    """
     lang2 = (lang2 or "ko").split("-")[0].lower()
     mapping = {
         "ko": "ko-KR",
@@ -43,6 +41,35 @@ def ms_delta(start: float | None, end: float | None) -> int | None:
     return round((end - start) * 1000)
 
 
+def split_sentences(text: str) -> list[str]:
+    text = (text or "").strip()
+    if not text:
+        return []
+
+    parts = re.split(r"(?<=[.!?])\s+|(?<=다\.)\s*|(?<=요\.)\s*|(?<=니다\.)\s*", text)
+    return [p.strip() for p in parts if p and p.strip()]
+
+
+def normalize_mascot_payload(raw_mascot: object) -> dict:
+    """
+    text_qa에서 _build_mascot_dict()가 만드는 형태와 최대한 맞춤.
+    start 메시지에서 mascot이 없더라도 빈 문자열 키들로 맞춰줌.
+    """
+    if not isinstance(raw_mascot, dict):
+        raw_mascot = {}
+
+    return {
+        "system_prompt": raw_mascot.get("system_prompt", "") or "",
+        "mascot_name": raw_mascot.get("mascot_name", "") or "",
+        "mascot_greeting": raw_mascot.get("mascot_greeting", "") or "",
+        "mascot_base_persona": raw_mascot.get("mascot_base_persona", "") or "",
+        "mascot_smalltalk_style": raw_mascot.get("mascot_smalltalk_style", "") or "",
+        "mascot_struct_db_style": raw_mascot.get("mascot_struct_db_style", "") or "",
+        "mascot_RAG_style": raw_mascot.get("mascot_RAG_style", "") or "",
+        "mascot_event_style": raw_mascot.get("mascot_event_style", "") or "",
+    }
+
+
 @traceable(name="emit_latency_summary", run_type="tool")
 def emit_latency_summary(
     trace_id: str,
@@ -50,8 +77,8 @@ def emit_latency_summary(
     realtime: bool,
     tts_stream: bool,
     stt_latency_ms: int | None,
-    llm_first_sentence_ms: int | None,
-    llm_total_ms: int | None,
+    qa_first_sentence_ms: int | None,
+    qa_total_ms: int | None,
     tts_first_audio_latency_ms: int | None,
     tts_total_ms: int | None,
     tts_sentence_count: int,
@@ -64,22 +91,12 @@ def emit_latency_summary(
         "tts_stream": tts_stream,
         "language_code": language_code,
         "stt_latency_ms": stt_latency_ms,
-        "llm_first_sentence_latency_ms": llm_first_sentence_ms,
-        "llm_total_ms": llm_total_ms,
+        "qa_first_sentence_latency_ms": qa_first_sentence_ms,
+        "qa_total_ms": qa_total_ms,
         "tts_first_audio_latency_ms": tts_first_audio_latency_ms,
         "tts_total_ms": tts_total_ms,
         "tts_sentence_count": tts_sentence_count,
     }
-
-
-@traceable(name="rag_retrieve", run_type="retriever")
-def traced_rag_retrieve(query: str, site_id: int):
-    return rag.retrieve(query, site_id)
-
-
-@traceable(name="text_run", run_type="chain")
-def traced_full_text_run(query: str, site_id: int, language_code: str):
-    return traced_text_run(query, site_id, language_code)
 
 
 @traceable(name="tts_synthesize", run_type="tool")
@@ -87,32 +104,49 @@ def traced_tts_synthesize(sentence: str, tts_language_code: str):
     return tts.synthesize(sentence, tts_language_code)
 
 
+@traceable(name="ws_text_qa_invoke", run_type="chain")
+def traced_ws_text_qa_invoke(
+    query: str,
+    site_id: int,
+    language_code: str,
+    mascot: dict | None = None,
+):
+    """
+    반드시 text_qa와 동일한 traced_text_run 경로를 사용.
+    """
+    mascot = normalize_mascot_payload(mascot)
+    return traced_text_run(query, site_id, language_code, mascot)
+
+
 async def audio_receiver(
     websocket: WebSocket,
     audio_q: "asyncio.Queue[Optional[bytes]]",
     timing: dict,
 ):
-    """
-    클라가 보내는 프레임:
-      - text: {"type":"stop"} 같은 control
-      - bytes: PCM chunk
-    """
-    while True:
-        msg = await websocket.receive()
+    try:
+        while True:
+            msg = await websocket.receive()
 
-        if msg.get("text") is not None:
-            data = json.loads(msg["text"])
-            if data.get("type") == "stop":
-                timing["stop_received_at"] = time.perf_counter()
-                await audio_q.put(None)
-                return
-            continue
+            if msg.get("text") is not None:
+                data = json.loads(msg["text"])
+                msg_type = data.get("type")
 
-        if msg.get("bytes") is not None:
-            if timing.get("first_audio_at") is None:
-                timing["first_audio_at"] = time.perf_counter()
-            timing["last_audio_at"] = time.perf_counter()
-            await audio_q.put(msg["bytes"])
+                if msg_type == "stop":
+                    timing["stop_received_at"] = time.perf_counter()
+                    await audio_q.put(None)
+                    return
+
+                continue
+
+            if msg.get("bytes") is not None:
+                if timing.get("first_audio_at") is None:
+                    timing["first_audio_at"] = time.perf_counter()
+                timing["last_audio_at"] = time.perf_counter()
+                await audio_q.put(msg["bytes"])
+
+    except WebSocketDisconnect:
+        await audio_q.put(None)
+        raise
 
 
 async def send_tts_chunks(
@@ -122,9 +156,6 @@ async def send_tts_chunks(
     trace_id: str,
     start_seq: int = 0,
 ) -> dict:
-    """
-    문장 리스트를 받아 문장 단위로 TTS 합성 후 순차 전송
-    """
     non_empty_sentences = [s.strip() for s in sentences if s and s.strip()]
 
     first_tts_audio_at = None
@@ -167,34 +198,25 @@ async def send_tts_chunks(
     }
 
 
-async def traced_llm_sentence_stream(
-    query: str,
-    contexts,
-) -> AsyncIterator[str]:
+def extract_answer_text(result) -> str:
     """
-    llm.stream_generate_sentences 자체가 async generator라
-    traceable로 직접 감싸기 애매해서 여기서 ls_trace로 묶음
+    traced_text_run 반환 형태 방어적으로 처리
     """
-    with ls_trace(
-        name="llm_sentence_stream",
-        run_type="llm",
-        inputs={
-            "query": query,
-            "context_count": len(contexts) if contexts is not None else 0,
-        },
-    ) as run:
-        collected = []
-        async for sentence in llm.stream_generate_sentences(query, contexts):
-            if sentence and sentence.strip():
-                collected.append(sentence.strip())
-                yield sentence.strip()
+    if result is None:
+        return ""
 
-        # outputs를 명시적으로 남기고 싶으면 이렇게
-        if run is not None:
-            try:
-                run.end(outputs={"answer": " ".join(collected)})
-            except Exception:
-                pass
+    if isinstance(result, dict):
+        return (result.get("answer") or result.get("answer_text") or "").strip()
+
+    answer = getattr(result, "answer", None)
+    if isinstance(answer, str):
+        return answer.strip()
+
+    answer_text = getattr(result, "answer_text", None)
+    if isinstance(answer_text, str):
+        return answer_text.strip()
+
+    return ""
 
 
 @router.websocket("/ws/stream")
@@ -220,12 +242,12 @@ async def ws_stream(websocket: WebSocket):
         stt_language = start.get("language_code", "ko-KR")
         sample_rate_hz = int(start.get("sample_rate_hz", 16000))
         interim_results = bool(start.get("interim_results", True))
-
         tts_stream = bool(start.get("tts_stream", True))
         realtime = bool(start.get("realtime", True))
+        mascot = normalize_mascot_payload(start.get("mascot"))
 
         with ls_trace(
-            name="ws_voice_pipeline",
+            name="ws_voice_textqa_pipeline",
             run_type="chain",
             metadata={
                 "trace_id": trace_id,
@@ -240,6 +262,7 @@ async def ws_stream(websocket: WebSocket):
                 "interim_results": interim_results,
                 "tts_stream": tts_stream,
                 "realtime": realtime,
+                "mascot": mascot,
             },
         ):
             audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue()
@@ -249,15 +272,12 @@ async def ws_stream(websocket: WebSocket):
                 "last_audio_at": None,
                 "stop_received_at": None,
                 "stt_final_at": None,
-                "llm_start_at": None,
-                "llm_first_sentence_at": None,
+                "qa_start_at": None,
+                "qa_first_sentence_at": None,
                 "tts_first_audio_at": None,
             }
 
-            async def _receiver_with_timer():
-                await audio_receiver(websocket, audio_q, timing)
-
-            recv_task = asyncio.create_task(_receiver_with_timer())
+            recv_task = asyncio.create_task(audio_receiver(websocket, audio_q, timing))
 
             await websocket.send_text(json.dumps({
                 "type": "status",
@@ -267,7 +287,7 @@ async def ws_stream(websocket: WebSocket):
 
             last_interim = ""
             last_final = ""
-            last_lang2 = "ko"
+            last_lang_code = stt_language
 
             with ls_trace(
                 name="stt_stream",
@@ -286,7 +306,7 @@ async def ws_stream(websocket: WebSocket):
                     interim_results=interim_results,
                     single_utterance=False,
                 ):
-                    last_lang2 = (ev.language_code or last_lang2).split("-")[0].lower()
+                    last_lang_code = ev.language_code or last_lang_code
 
                     if ev.is_final:
                         last_final = ev.transcript
@@ -329,46 +349,138 @@ async def ws_stream(websocket: WebSocket):
                 await websocket.close()
                 return
 
-            tts_language_code = map_tts_language(last_lang2)
+            tts_language_code = map_tts_language(last_lang_code)
 
             await websocket.send_text(json.dumps({
                 "type": "status",
-                "stage": "llm_start",
+                "stage": "graph_start",
                 "trace_id": trace_id,
             }, ensure_ascii=False))
 
-            # 1) 전체 답변 한 번에 생성
-            if not realtime:
-                timing["llm_start_at"] = time.perf_counter()
+            timing["qa_start_at"] = time.perf_counter()
 
-                result = await asyncio.to_thread(
-                    traced_full_text_run,
-                    query,
-                    site_id,
-                    last_lang2,
+            qa_result = await asyncio.to_thread(
+                traced_ws_text_qa_invoke,
+                query,
+                site_id,
+                last_lang_code,
+                mascot,
+            )
+
+            qa_total_ms = ms_delta(
+                timing["qa_start_at"],
+                time.perf_counter(),
+            )
+
+            answer_text = extract_answer_text(qa_result)
+            if not answer_text:
+                answer_text = "죄송해요. 답변을 생성하지 못했어요."
+
+            sentences = split_sentences(answer_text)
+
+            tts_first_audio_latency_ms = None
+            tts_total_ms = None
+            tts_sentence_count = 0
+
+            if realtime:
+                await websocket.send_text(json.dumps({
+                    "type": "status",
+                    "stage": "graph_stream_start",
+                    "trace_id": trace_id,
+                }, ensure_ascii=False))
+
+                for idx, sentence in enumerate(sentences):
+                    if timing["qa_first_sentence_at"] is None:
+                        timing["qa_first_sentence_at"] = time.perf_counter()
+
+                    await websocket.send_text(json.dumps({
+                        "type": "llm_sentence",
+                        "text": sentence,
+                        "language_code": last_lang_code,
+                        "trace_id": trace_id,
+                    }, ensure_ascii=False))
+
+                    if tts_stream:
+                        if idx == 0:
+                            await websocket.send_text(json.dumps({
+                                "type": "status",
+                                "stage": "tts_start",
+                                "trace_id": trace_id,
+                            }, ensure_ascii=False))
+
+                        tts_result = await send_tts_chunks(
+                            websocket=websocket,
+                            sentences=[sentence],
+                            tts_language_code=tts_language_code,
+                            trace_id=trace_id,
+                            start_seq=idx,
+                        )
+
+                        tts_total_ms = (tts_total_ms or 0) + tts_result["total_tts_ms"]
+                        tts_sentence_count += tts_result["sentence_count"]
+
+                        if timing["tts_first_audio_at"] is None:
+                            timing["tts_first_audio_at"] = tts_result["first_tts_audio_at"]
+
+                qa_first_sentence_ms = ms_delta(
+                    timing["qa_start_at"],
+                    timing["qa_first_sentence_at"],
                 )
 
-                llm_total_ms = ms_delta(timing["llm_start_at"], time.perf_counter())
-                answer_text = result.answer or ""
+                if tts_stream and timing["tts_first_audio_at"] is not None:
+                    tts_first_audio_latency_ms = ms_delta(
+                        timing["qa_start_at"],
+                        timing["tts_first_audio_at"],
+                    )
+
+                    await websocket.send_text(json.dumps({
+                        "type": "status",
+                        "stage": "tts_done",
+                        "trace_id": trace_id,
+                    }, ensure_ascii=False))
 
                 await websocket.send_text(json.dumps({
                     "type": "final_text",
                     "site_id": site_id,
-                    "language_code": last_lang2,
-                    "query": result.query,
+                    "language_code": last_lang_code,
+                    "query": query,
                     "answer": answer_text,
                     "trace_id": trace_id,
                 }, ensure_ascii=False))
 
-                tts_first_audio_latency_ms = None
-                tts_total_ms = None
-                tts_sentence_count = 0
+                await websocket.send_text(json.dumps({
+                    "type": "status",
+                    "stage": "graph_stream_done",
+                    "trace_id": trace_id,
+                }, ensure_ascii=False))
+
+                emit_latency_summary(
+                    trace_id=trace_id,
+                    site_id=site_id,
+                    realtime=True,
+                    tts_stream=tts_stream,
+                    stt_latency_ms=stt_latency_ms,
+                    qa_first_sentence_ms=qa_first_sentence_ms,
+                    qa_total_ms=qa_total_ms,
+                    tts_first_audio_latency_ms=tts_first_audio_latency_ms,
+                    tts_total_ms=tts_total_ms if tts_stream else None,
+                    tts_sentence_count=tts_sentence_count if tts_stream else 0,
+                    language_code=tts_language_code,
+                )
+
+            else:
+                await websocket.send_text(json.dumps({
+                    "type": "final_text",
+                    "site_id": site_id,
+                    "language_code": last_lang_code,
+                    "query": query,
+                    "answer": answer_text,
+                    "trace_id": trace_id,
+                }, ensure_ascii=False))
+
+                qa_first_sentence_ms = None
 
                 if tts_stream and answer_text.strip():
-                    sentences = [s.strip() for s in answer_text.split("\n") if s.strip()]
-                    if not sentences:
-                        sentences = [answer_text]
-
                     await websocket.send_text(json.dumps({
                         "type": "status",
                         "stage": "tts_start",
@@ -377,7 +489,7 @@ async def ws_stream(websocket: WebSocket):
 
                     tts_result = await send_tts_chunks(
                         websocket=websocket,
-                        sentences=sentences,
+                        sentences=sentences or [answer_text],
                         tts_language_code=tts_language_code,
                         trace_id=trace_id,
                         start_seq=0,
@@ -386,7 +498,7 @@ async def ws_stream(websocket: WebSocket):
                     tts_total_ms = tts_result["total_tts_ms"]
                     tts_sentence_count = tts_result["sentence_count"]
                     tts_first_audio_latency_ms = ms_delta(
-                        timing["llm_start_at"],
+                        timing["qa_start_at"],
                         tts_result["first_tts_audio_at"],
                     )
 
@@ -402,130 +514,13 @@ async def ws_stream(websocket: WebSocket):
                     realtime=False,
                     tts_stream=tts_stream,
                     stt_latency_ms=stt_latency_ms,
-                    llm_first_sentence_ms=None,
-                    llm_total_ms=llm_total_ms,
+                    qa_first_sentence_ms=qa_first_sentence_ms,
+                    qa_total_ms=qa_total_ms,
                     tts_first_audio_latency_ms=tts_first_audio_latency_ms,
                     tts_total_ms=tts_total_ms,
                     tts_sentence_count=tts_sentence_count,
                     language_code=tts_language_code,
                 )
-
-                await websocket.send_text(json.dumps({
-                    "type": "done",
-                    "trace_id": trace_id,
-                }, ensure_ascii=False))
-                await websocket.close()
-                return
-
-            # 2) 턴 종료 후 LLM sentence stream
-            contexts = await asyncio.to_thread(traced_rag_retrieve, query, site_id)
-
-            await websocket.send_text(json.dumps({
-                "type": "status",
-                "stage": "llm_stream_start",
-                "trace_id": trace_id,
-            }, ensure_ascii=False))
-
-            full_answer_parts: list[str] = []
-
-            timing["llm_start_at"] = time.perf_counter()
-            tts_started = False
-            tts_total_ms = 0
-            tts_sentence_count = 0
-            tts_seq = 0
-
-            async for sentence in traced_llm_sentence_stream(query, contexts):
-                if not sentence.strip():
-                    continue
-
-                if timing["llm_first_sentence_at"] is None:
-                    timing["llm_first_sentence_at"] = time.perf_counter()
-
-                full_answer_parts.append(sentence)
-
-                await websocket.send_text(json.dumps({
-                    "type": "llm_sentence",
-                    "text": sentence,
-                    "language_code": last_lang2,
-                    "trace_id": trace_id,
-                }, ensure_ascii=False))
-
-                if tts_stream:
-                    if not tts_started:
-                        tts_started = True
-                        await websocket.send_text(json.dumps({
-                            "type": "status",
-                            "stage": "tts_start",
-                            "trace_id": trace_id,
-                        }, ensure_ascii=False))
-
-                    tts_result = await send_tts_chunks(
-                        websocket=websocket,
-                        sentences=[sentence],
-                        tts_language_code=tts_language_code,
-                        trace_id=trace_id,
-                        start_seq=tts_seq,
-                    )
-
-                    tts_seq = tts_result["next_seq"]
-                    tts_total_ms += tts_result["total_tts_ms"]
-                    tts_sentence_count += tts_result["sentence_count"]
-
-                    if timing["tts_first_audio_at"] is None:
-                        timing["tts_first_audio_at"] = tts_result["first_tts_audio_at"]
-
-            final_answer = " ".join(full_answer_parts).strip()
-
-            llm_first_sentence_ms = ms_delta(
-                timing["llm_start_at"],
-                timing["llm_first_sentence_at"],
-            )
-            total_llm_ms = ms_delta(
-                timing["llm_start_at"],
-                time.perf_counter(),
-            )
-
-            tts_first_audio_latency_ms = None
-            if tts_stream and tts_started:
-                tts_first_audio_latency_ms = ms_delta(
-                    timing["llm_start_at"],
-                    timing["tts_first_audio_at"],
-                )
-
-                await websocket.send_text(json.dumps({
-                    "type": "status",
-                    "stage": "tts_done",
-                    "trace_id": trace_id,
-                }, ensure_ascii=False))
-
-            emit_latency_summary(
-                trace_id=trace_id,
-                site_id=site_id,
-                realtime=True,
-                tts_stream=tts_stream,
-                stt_latency_ms=stt_latency_ms,
-                llm_first_sentence_ms=llm_first_sentence_ms,
-                llm_total_ms=total_llm_ms,
-                tts_first_audio_latency_ms=tts_first_audio_latency_ms,
-                tts_total_ms=tts_total_ms if tts_stream else None,
-                tts_sentence_count=tts_sentence_count if tts_stream else 0,
-                language_code=tts_language_code,
-            )
-
-            await websocket.send_text(json.dumps({
-                "type": "final_text",
-                "site_id": site_id,
-                "language_code": last_lang2,
-                "query": query,
-                "answer": final_answer,
-                "trace_id": trace_id,
-            }, ensure_ascii=False))
-
-            await websocket.send_text(json.dumps({
-                "type": "status",
-                "stage": "llm_stream_done",
-                "trace_id": trace_id,
-            }, ensure_ascii=False))
 
             await websocket.send_text(json.dumps({
                 "type": "done",
@@ -535,6 +530,7 @@ async def ws_stream(websocket: WebSocket):
 
     except WebSocketDisconnect:
         return
+
     except Exception as e:
         try:
             await websocket.send_text(json.dumps({
@@ -545,6 +541,7 @@ async def ws_stream(websocket: WebSocket):
             }, ensure_ascii=False))
         finally:
             await websocket.close()
+
     finally:
         if recv_task and not recv_task.done():
             recv_task.cancel()
