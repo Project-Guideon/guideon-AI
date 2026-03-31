@@ -3,13 +3,17 @@
 
 흐름:
   PDF bytes → pymupdf4llm(마크다운 변환) → # 헤더 기반 섹션 파싱
-  → GPT-4o-mini 검색용 요약 생성 → 요약 임베딩 → DB 저장
+  → GPT-4o 검색용 요약 생성 → 요약 임베딩 → DB 저장
 
 기존 PDF2db.py(v1)와 독립적으로 동작하며, tb_doc_chunk_v2 테이블에 저장.
+
+개선점:
+1. 기존의 단일 title -> 계층적 title
+2. overlap이 글자 단위에서 문장 단위로 개선
+3. 임베딩 시 section_title + summary + keywords 조합
 """
 from __future__ import annotations
 
-import io
 import json
 import re
 import tempfile
@@ -53,137 +57,228 @@ def parse_markdown_sections(
     md_text: str,
     max_chunk_size: int = 600,
     min_chunk_size: int = 80,
-    chunk_overlap: int = 100,
+    sentence_overlap: int = 2,
 ) -> List[Dict[str, Any]]:
-    """마크다운 헤더(#, ##, ###)를 기준으로 섹션 분리.
+    """마크다운 헤더(#, ##, ###, ####)를 기준으로 계층형 섹션 분리.
 
     Returns:
         [{"section_title": "...", "content": "...", "level": 1}, ...]
 
-    - 헤더가 없는 긴 텍스트는 max_chunk_size 기준으로 단락 분리
-    - 너무 짧은 섹션(< min_chunk_size)은 다음 섹션과 병합
+    개선점:
+    - 헤더 경로를 계층형으로 유지 (예: 관람안내 > 운영시간 > 야간개장)
+    - 긴 섹션은 문단 기준 분할
+    - overlap은 문자 단위가 아니라 문장 단위로 붙임
+    - 너무 짧은 청크는 앞 청크와 병합
     """
-    # 마크다운 헤더 패턴: # Title, ## Title, ### Title
-    header_pattern = re.compile(r"^(#{1,4})\s+(.+)$", re.MULTILINE)
+    header_pattern = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
+    numbered_header_pattern = re.compile(r"^(\d+(?:\.\d+)*[.)]?)\s+(.+?)\s*$", re.MULTILINE)
+
+    def split_sentences(text: str) -> List[str]:
+        text = text.strip()
+        if not text:
+            return []
+        # 한국어/영어 혼합 대응용
+        parts = re.split(r"(?<=[.!?。])\s+|(?<=다\.)\s+|(?<=요\.)\s+|(?<=니다\.)\s+", text)
+        return [p.strip() for p in parts if p.strip()]
+
+    def get_sentence_overlap(text: str, keep_last_n: int = 2) -> str:
+        sents = split_sentences(text)
+        if not sents:
+            return text[-100:].strip()  # fallback
+        return " ".join(sents[-keep_last_n:]).strip()
+
+    def split_long_paragraph(paragraph: str, max_size: int) -> List[str]:
+        """문단 하나가 너무 길면 문장 기준으로 재분할. 최후에는 글자수 기준."""
+        paragraph = paragraph.strip()
+        if len(paragraph) <= max_size:
+            return [paragraph]
+
+        sents = split_sentences(paragraph)
+        if not sents:
+            # 문장 분리가 안 되면 글자수 기준 fallback
+            return [paragraph[i:i + max_size] for i in range(0, len(paragraph), max_size)]
+
+        out = []
+        buf = ""
+
+        for s in sents:
+            if not buf:
+                buf = s
+            elif len(buf) + 1 + len(s) <= max_size:
+                buf = f"{buf} {s}"
+            else:
+                out.append(buf.strip())
+                if len(s) <= max_size:
+                    buf = s
+                else:
+                    # 문장 하나가 너무 길면 글자수 기준 fallback
+                    for i in range(0, len(s), max_size):
+                        piece = s[i:i + max_size].strip()
+                        if piece:
+                            out.append(piece)
+                    buf = ""
+
+        if buf.strip():
+            out.append(buf.strip())
+
+        return out
 
     sections: List[Dict[str, Any]] = []
-    last_pos = 0
-    last_title = ""
-    last_level = 0
 
-    for match in header_pattern.finditer(md_text):
-        # 헤더 이전 텍스트를 이전 섹션의 content로
-        before_text = md_text[last_pos:match.start()].strip()
-        if before_text:
-            sections.append({
-                "section_title": last_title,
-                "content": before_text,
-                "level": last_level,
-            })
+    matches = []
+    for m in header_pattern.finditer(md_text):
+        matches.append(("md", m.start(), m))
 
-        last_title = match.group(2).strip()
-        last_level = len(match.group(1))  # # = 1, ## = 2, ### = 3
-        last_pos = match.end()
+    for m in numbered_header_pattern.finditer(md_text):
+        matches.append(("num", m.start(), m))
 
-    # 마지막 섹션
-    remaining = md_text[last_pos:].strip()
-    if remaining:
+    matches.sort(key=lambda x: x[1])
+
+    if not matches:
+        raw = md_text.strip()
+        if not raw:
+            return []
+        
+        paragraphs = [p.strip() for p in re.split(r"\n\s*\n", raw) if p.strip()]
+        
+        if len(paragraphs) == 1:
+            return [{
+                "section_title": "본문",
+                "content": raw,
+                "level": 0,
+            }]
+        
+        return [
+            {
+                "section_title": f"본문 {i+1}",
+                "content": paragraph,
+                "level": 0,
+            }
+            for i, paragraph in enumerate(paragraphs)
+        ]
+    title_stack: List[str] = []
+
+    first_start = matches[0][1]
+    preamble = md_text[:first_start].strip()
+    if preamble:
         sections.append({
-            "section_title": last_title,
-            "content": remaining,
-            "level": last_level,
-        })
-
-    # 헤더가 하나도 없으면 전체를 하나의 섹션으로
-    if not sections:
-        sections.append({
-            "section_title": "",
-            "content": md_text.strip(),
+            "section_title": "서론",
+            "content": preamble,
             "level": 0,
         })
 
-    # 짧은 섹션 병합
-    merged: List[Dict[str, Any]] = []
+    for i, (kind, _, match) in enumerate(matches):
+        if kind == "md":
+            level = len(match.group(1))
+            title = match.group(2).strip()
+        else:
+            num_token = match.group(1).strip()
+            title = match.group(2).strip()
+            level = num_token.count(".") + 1
+        
+        if len(title) > 80 or len(title.split()) > 12:
+            title = f"섹션 {i+1}"
+        if not title:
+            title = f"섹션 {i+1}"
+
+        content_start = match.end()
+        content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
+        content = md_text[content_start:content_end].strip()
+
+        if not content:
+            continue
+
+        title_stack = title_stack[:level - 1]
+        title_stack.append(title)
+        section_title = " > ".join(title_stack)
+
+        sections.append({
+            "section_title": section_title,
+            "content": content,
+            "level": level,
+        })
+
+    # 너무 긴 섹션은 문단 기준으로 분할
+    split_sections: List[Dict[str, Any]] = []
     for sec in sections:
-        if merged and len(merged[-1]["content"]) < min_chunk_size:
-            # 이전 섹션이 너무 짧으면 현재와 병합
-            prev = merged[-1]
-            prev["content"] += "\n\n" + sec["content"]
-            if sec["section_title"] and not prev["section_title"]:
-                prev["section_title"] = sec["section_title"]
-        else:
-            merged.append(sec)
+        content = sec["content"].strip()
+        if len(content) <= max_chunk_size:
+            split_sections.append(sec)
+            continue
 
-    # 마지막 섹션이 너무 짧으면 이전과 병합
-    if len(merged) > 1 and len(merged[-1]["content"]) < min_chunk_size:
-        merged[-2]["content"] += "\n\n" + merged[-1]["content"]
-        merged.pop()
+        paragraphs = [p.strip() for p in re.split(r"\n\s*\n", content) if p.strip()]
 
-    # 너무 긴 섹션은 단락 기준으로 분할 (overlap 포함)
-    final: List[Dict[str, Any]] = []
-    for sec in merged:
-        if len(sec["content"]) <= max_chunk_size:
-            final.append(sec)
-        else:
-            # 단락(\n\n) 기준으로 분할
-            paragraphs = sec["content"].split("\n\n")
+        # 리스트 블록이 쪼개지지 않도록 약간 보존
+        normalized_blocks: List[str] = []
+        list_buf: List[str] = []
 
-            # 단일 단락이 max_chunk_size 초과 시 문장 단위로 재분할
-            split_paras: List[str] = []
-            for _p in paragraphs:
-                if len(_p) <= max_chunk_size:
-                    split_paras.append(_p)
-                else:
-                    sents = re.split(r"(?<=[.?!。])\s+", _p)
-                    buf = ""
-                    for s in sents:
-                        if buf and len(buf) + len(s) + 1 > max_chunk_size:
-                            split_paras.append(buf)
-                            buf = s
-                        elif len(s) > max_chunk_size:
-                            if buf:
-                                split_paras.append(buf)
-                                buf = ""
-                            step = max(max_chunk_size - chunk_overlap, 1)
-                            for i in range(0, len(s), step):
-                                split_paras.append(s[i : i + max_chunk_size])
-                        else:
-                            buf = buf + " " + s if buf else s
-                    if buf:
-                        split_paras.append(buf)
-            paragraphs = split_paras
+        def flush_list_buf():
+            nonlocal list_buf
+            if list_buf:
+                normalized_blocks.append("\n".join(list_buf).strip())
+                list_buf = []
 
-            current = ""
-            overlap_buf = ""   # 이전 chunk의 마지막 단락(들)을 보관
-            part_num = 0
-            for para in paragraphs:
-                if current and len(current) + len(para) + 2 > max_chunk_size:
-                    part_num += 1
-                    title = f"{sec['section_title']} (part {part_num})" if sec["section_title"] else ""
-                    final.append({
-                        "section_title": title,
-                        "content": current.strip(),
-                        "level": sec["level"],
-                    })
-                    # overlap: current의 끝부분을 다음 chunk 앞에 붙임
-                    overlap_buf = current[-chunk_overlap:].strip() if chunk_overlap else ""
-                    current = (overlap_buf + "\n\n" + para).strip() if overlap_buf else para
-                else:
-                    current = current + "\n\n" + para if current else para
+        for p in paragraphs:
+            lines = [ln.rstrip() for ln in p.splitlines() if ln.strip()]
+            is_list_block = bool(lines) and bool(re.match(r"^([-*•]|\d+[.)])\s+", lines[0].strip()))
 
-            if current.strip():
+            if is_list_block:
+                list_buf.append("\n".join(lines))
+            else:
+                flush_list_buf()
+                normalized_blocks.append(p)
+
+        flush_list_buf()
+
+        blocks: List[str] = []
+        for block in normalized_blocks:
+            if len(block) <= max_chunk_size:
+                blocks.append(block)
+            else:
+                blocks.extend(split_long_paragraph(block, max_chunk_size))
+
+        current = ""
+        part_num = 0
+
+        for block in blocks:
+            candidate = f"{current}\n\n{block}".strip() if current else block
+            if current and len(candidate) > max_chunk_size:
                 part_num += 1
-                title = sec["section_title"]
-                if part_num > 1:
-                    title = f"{sec['section_title']} (part {part_num})" if sec["section_title"] else ""
-                final.append({
-                    "section_title": title,
+                chunk_title = sec["section_title"] if part_num == 1 else f"{sec['section_title']} (part {part_num})"
+                split_sections.append({
+                    "section_title": chunk_title,
                     "content": current.strip(),
                     "level": sec["level"],
                 })
 
-    return final
+                overlap_buf = get_sentence_overlap(current, keep_last_n=sentence_overlap)
+                current = f"{overlap_buf}\n\n{block}".strip() if overlap_buf else block
+            else:
+                current = candidate
 
+        if current.strip():
+            part_num += 1
+            chunk_title = sec["section_title"] if part_num == 1 else f"{sec['section_title']} (part {part_num})"
+            split_sections.append({
+                "section_title": chunk_title,
+                "content": current.strip(),
+                "level": sec["level"],
+            })
+
+    # 너무 짧은 청크는 앞 청크와 병합
+    merged: List[Dict[str, Any]] = []
+    for sec in split_sections:
+        if merged and len(sec["content"]) < min_chunk_size:
+            merged[-1]["content"] = f"{merged[-1]['content']}\n\n{sec['content']}".strip()
+        else:
+            merged.append(sec)
+
+    # 마지막도 너무 짧으면 앞과 병합
+    if len(merged) > 1 and len(merged[-1]["content"]) < min_chunk_size:
+        merged[-2]["content"] = f"{merged[-2]['content']}\n\n{merged[-1]['content']}".strip()
+        merged.pop()
+
+    return merged
 
 # ── 3) GPT 검색용 요약 생성 ──────────────────────────────────────────────────
 
@@ -297,6 +392,17 @@ def create_doc_record(
         conn.commit()
     return doc_id
 
+def build_search_text(section_title: str, summary: str, keywords: List[str]) -> str:
+    return f"""
+[section]
+{section_title}
+
+[summary]
+{summary}
+
+[keywords]
+{' '.join(keywords)}
+""".strip()
 
 def process_pdf_bytes_v2(
     doc_id: int,
@@ -351,7 +457,11 @@ def process_pdf_bytes_v2(
             keywords = summary_result["keywords"]
 
             # 검색용 텍스트 조합 → 임베딩
-            search_text = f"{section_title} {summary} {' '.join(keywords)}"
+            search_text = build_search_text(
+                section_title=section_title, 
+                summary=summary, 
+                keywords=keywords
+            )
             emb = client.embeddings.create(
                 model=MODEL_NAME,
                 input=search_text,
