@@ -66,6 +66,6 @@ def fetch_places_node(state: GraphState) -> dict:
         return {"nearby_places": nearby_places, "trace": trace}
 
     except Exception as e:
-        print(f"[fetch_places] 오류: {e}")
-        trace["fetch_places"] = {"status": "error", "error": str(e)}
+        print(f"[fetch_places] 오류: {type(e).__name__}")
+        trace["fetch_places"] = {"status": "error", "error": "core_places_failed"}
         return {"nearby_places": [], "trace": trace}
