@@ -87,15 +87,13 @@ def make_struct_db_node(llm: OpenAILLM):
                 persona_lines.append(f"Your name is {name}.")
             if style:
                 persona_lines.append(
-                    f"[Speech style (originally in Korean)]: {style}\n"
-                    f"→ You MUST apply this style in {lang_name}. "
-                    f"First, understand what the Korean instruction asks "
-                    f"(e.g. adding a catchphrase, sentence-ending particle, or tone). "
-                    f"Then, find the closest natural {lang_name} equivalent and USE it in your answer. "
-                    f"For example, if the Korean says to add '짜잔!' at the end, use a {lang_name} exclamation "
-                    f"with the same playful/dramatic feeling (e.g. Chinese: '当当！', Japanese: 'じゃーん！'). "
-                    f"Do NOT skip the style — it must be visible in your response. "
-                    f"Do NOT use the original Korean words — always use {lang_name} equivalents."
+                    f"[Speech style instruction — written in Korean]: {style}\n"
+                    f"→ Translate the above Korean style instruction into {lang_name} first, "
+                    f"then follow it exactly in {lang_name}. "
+                    f"If it says to add a word/phrase at the end of sentences, "
+                    f"translate that word/phrase into {lang_name} and add it.\n"
+                    f"- CRITICAL: The style MUST be visible in your response.\n"
+                    f"- CRITICAL: Do NOT use the original Korean words — always translate them into {lang_name}."
                 )
             persona_block = "\n".join(persona_lines) if persona_lines else f"You are a friendly tourist guide assistant."
 
