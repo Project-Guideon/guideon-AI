@@ -52,17 +52,16 @@ def make_struct_db_node(llm: OpenAILLM):
         style = state.get("mascot_struct_db_style") or ""
         name = state.get("mascot_name") or ""
 
-        persona_lines = []
-        if system_prompt:
-            persona_lines.append(system_prompt)
-        if name:
-            persona_lines.append(f"당신의 이름은 {name}입니다.")
-        if style:
-            persona_lines.append(f"말투 지침: {style}")
-
-        persona_block = "\n".join(persona_lines) if persona_lines else "당신은 관광지의 친절한 위치 안내원입니다."
-
         if user_language == "ko":
+            persona_lines = []
+            if system_prompt:
+                persona_lines.append(system_prompt)
+            if name:
+                persona_lines.append(f"당신의 이름은 {name}입니다.")
+            if style:
+                persona_lines.append(f"말투 지침: {style}")
+            persona_block = "\n".join(persona_lines) if persona_lines else "당신은 관광지의 친절한 위치 안내원입니다."
+
             system_msg = (
                 f"{persona_block}\n"
                 "규칙:\n"
@@ -79,9 +78,31 @@ def make_struct_db_node(llm: OpenAILLM):
             lang_name = {"en": "English", "zh": "Chinese", "ja": "Japanese"}.get(
                 user_language, user_language.upper()
             )
+            persona_lines = []
+            if system_prompt:
+                persona_lines.append(
+                    f"[Character setting (originally in Korean, for your reference only)]: {system_prompt}"
+                )
+            if name:
+                persona_lines.append(f"Your name is {name}.")
+            if style:
+                persona_lines.append(
+                    f"[Speech style (originally in Korean)]: {style}\n"
+                    f"→ You MUST apply this style in {lang_name}. "
+                    f"First, understand what the Korean instruction asks "
+                    f"(e.g. adding a catchphrase, sentence-ending particle, or tone). "
+                    f"Then, find the closest natural {lang_name} equivalent and USE it in your answer. "
+                    f"For example, if the Korean says to add '짜잔!' at the end, use a {lang_name} exclamation "
+                    f"with the same playful/dramatic feeling (e.g. Chinese: '当当！', Japanese: 'じゃーん！'). "
+                    f"Do NOT skip the style — it must be visible in your response. "
+                    f"Do NOT use the original Korean words — always use {lang_name} equivalents."
+                )
+            persona_block = "\n".join(persona_lines) if persona_lines else f"You are a friendly tourist guide assistant."
+
             system_msg = (
                 f"{persona_block}\n"
                 "Rules:\n"
+                f"  - CRITICAL: Your entire answer MUST be in {lang_name}. Do NOT include any Korean words or particles.\n"
                 f"  - Respond in {lang_name}, 1-2 sentences\n"
                 "  - Use ONLY the provided nearby places list (do not invent places)\n"
                 "  - Prioritize same-zone (✓ 같은 구역) places and shorter distances\n"

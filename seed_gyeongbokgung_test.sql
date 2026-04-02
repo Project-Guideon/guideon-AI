@@ -57,23 +57,23 @@ SELECT s.site_id, '동쪽구역', 'EAST', 'INNER', NULL,
 FROM tb_site s WHERE s.name = '경복궁';
 
 -- ─────────────────────────────────────────────────────────
--- 3. Place - 화장실 (category: RESTROOM)
+-- 3. Place - 화장실 (category: TOILET)
 -- ─────────────────────────────────────────────────────────
 -- zone 내부 화장실 3개
 INSERT INTO tb_place (site_id, name, category, location, description)
-SELECT s.site_id, '화장실_남쪽', 'RESTROOM',
+SELECT s.site_id, '화장실_남쪽', 'TOILET',
   ST_SetSRID(ST_MakePoint(126.9769, 37.5752), 4326)::geography,
   '광화문 매표소 동쪽 화장실. 남녀 구분. 장애인 화장실 포함.'
 FROM tb_site s WHERE s.name = '경복궁';
 
 INSERT INTO tb_place (site_id, name, category, location, description)
-SELECT s.site_id, '화장실_중앙', 'RESTROOM',
+SELECT s.site_id, '화장실_중앙', 'TOILET',
   ST_SetSRID(ST_MakePoint(126.9765, 37.5775), 4326)::geography,
   '근정전 서쪽 화장실. 남녀 구분. 기저귀 교환대 있음.'
 FROM tb_site s WHERE s.name = '경복궁';
 
 INSERT INTO tb_place (site_id, name, category, location, description)
-SELECT s.site_id, '화장실_북쪽', 'RESTROOM',
+SELECT s.site_id, '화장실_북쪽', 'TOILET',
   ST_SetSRID(ST_MakePoint(126.9750, 37.5800), 4326)::geography,
   '향원정 남동쪽 화장실. 남녀 구분.'
 FROM tb_site s WHERE s.name = '경복궁';
@@ -81,7 +81,7 @@ FROM tb_site s WHERE s.name = '경복궁';
 -- zone 외부 화장실 (zone_id = NULL) → fallback 테스트용
 -- 동쪽 담장 바깥 (lng 126.9800, zone EAST는 126.981부터 시작)
 INSERT INTO tb_place (site_id, name, category, location, description)
-SELECT s.site_id, '화장실_외부', 'RESTROOM',
+SELECT s.site_id, '화장실_외부', 'TOILET',
   ST_SetSRID(ST_MakePoint(126.9800, 37.5770), 4326)::geography,
   '경복궁 동쪽 담장 외부 공중화장실. 어느 zone에도 속하지 않음.'
 FROM tb_site s WHERE s.name = '경복궁';
@@ -190,7 +190,7 @@ CROSS JOIN LATERAL (
   SELECT p2.name, p2.location, p2.zone_id
   FROM tb_place p2
   WHERE p2.site_id = d.site_id
-    AND p2.category = 'RESTROOM'
+    AND p2.category = 'TOILET'
     AND p2.is_active = TRUE
   ORDER BY
     CASE WHEN p2.zone_id = d.zone_id THEN 0 ELSE 999999 END
