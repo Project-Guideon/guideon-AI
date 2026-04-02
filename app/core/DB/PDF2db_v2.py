@@ -315,14 +315,14 @@ def generate_search_summary(
 
 아래 JSON 형식으로만 응답하세요:
 {{
-  "summary": "3-4문장으로 이 텍스트의 핵심 내용을 요약. 텍스트에 등장하는 모든 인물, 사건, 장소를 빠짐없이 포함하세요.",
+  "summary": "5-7문장으로 이 텍스트의 핵심 내용을 요약. 텍스트에 등장하는 모든 인물, 사건, 장소를 빠짐없이 포함하세요.",
   "keywords": [
     "텍스트에 등장하는 인물명(왕, 왕비, 신하 등) 전부",
     "장소명, 건물명 전부",
     "사건명, 연도 전부",
     "입장료·수량 등 숫자 정보",
     "핵심 개념어",
-    "총 10-15개"
+    "총 20-25개"
   ]
 }}
 
@@ -336,7 +336,7 @@ def generate_search_summary(
         ],
         #temperature=0.1, temperature 지원안함 
         #max_tokens=500, gpt-5-mini는 max_tokens 대신 max_completion_tokens 사용
-        #max_completion_tokens=4000, #질문도 포함해서 4096 토큰까지 지원하므로 알아서 설정하게
+        max_completion_tokens=1000, #질문도 포함해서 4096 토큰까지 지원하므로 알아서 설정하게
         response_format={"type": "json_object"},
     )
 
