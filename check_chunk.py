@@ -10,7 +10,7 @@ conn = psycopg2.connect(
 
 cur = conn.cursor()
 
-doc_id = 2
+doc_id = 1
 
 cur.execute("""
     SELECT chunk_index, section_title, summary, keywords, content
@@ -35,4 +35,4 @@ with open(f"doc_{doc_id}_chunks.txt", "w", encoding="utf-8") as f:
 cur.close()
 conn.close()
 
-print(f"doc_{doc_id}_chunks.txt 저장 완료")
+print(f"doc_{doc_id}_chunksA.txt 저장 완료")

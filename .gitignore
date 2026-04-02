@@ -26,4 +26,7 @@ google-credentials.json
 *.wav
 *.mp3
 *.md
-!README.md
+!README.md"check_chunk.py" 
+"doc_1_chunks.txt" 
+"check_chunk.py" 
+"doc_1_chunks.txt" 

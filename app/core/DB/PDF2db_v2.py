@@ -296,10 +296,18 @@ def generate_search_summary(
     
     safe_content = content if content is not None else ""
     safe_title = section_title if section_title is not None else "(없음)"
-    
-    
-    content = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', safe_content)
-    section_title = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', safe_title)
+
+    def _sanitize(text: str) -> str:
+        # 1) 제어 문자 제거
+        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+        # 2) 서로게이트 문자 제거 (JSON 직렬화 깨뜨리는 원인)
+        text = text.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+        # 3) JSON에서 문제 되는 특수 유니코드 제거 (BOM, 제로폭 문자 등)
+        text = re.sub(r'[\ufffe\uffff\ufeff\ufdd0-\ufdef]', '', text)
+        return text
+
+    content = _sanitize(safe_content)
+    section_title = _sanitize(safe_title)
     system_prompt = (
         "당신은 관광 안내 문서의 검색 최적화 전문가입니다.\n"
         "주어진 텍스트를 분석하여 검색에 최적화된 요약과 키워드를 생성하세요.\n"
@@ -315,7 +323,7 @@ def generate_search_summary(
 
 아래 JSON 형식으로만 응답하세요:
 {{
-  "summary": "5-7문장으로 이 텍스트의 핵심 내용을 요약. 텍스트에 등장하는 모든 인물, 사건, 장소를 빠짐없이 포함하세요.",
+  "summary": "4-6문장으로 이 텍스트의 핵심 내용을 요약. 텍스트에 등장하는 모든 인물, 사건, 장소를 빠짐없이 포함하세요.",
   "keywords": [
     "텍스트에 등장하는 인물명(왕, 왕비, 신하 등) 전부",
     "장소명, 건물명 전부",
@@ -336,17 +344,24 @@ def generate_search_summary(
         ],
         #temperature=0.1, temperature 지원안함 
         #max_tokens=500, gpt-5-mini는 max_tokens 대신 max_completion_tokens 사용
-        max_completion_tokens=1000, #질문도 포함해서 4096 토큰까지 지원하므로 알아서 설정하게
+        # 제한을 안두는게 맞을듯max_completion_tokens=2000, #질문도 포함해서 4096 토큰까지 지원하므로 알아서 설정하게
         response_format={"type": "json_object"},
     )
 
     raw_content = response.choices[0].message.content
+    finish_reason = response.choices[0].finish_reason
+    print(f"[summary] section='{section_title}' | finish_reason={finish_reason} | raw_len={len(raw_content) if raw_content else 0}", flush=True)
+    if finish_reason == "length":
+        print(f"[summary] WARNING: 토큰 제한으로 응답이 잘림! section='{section_title}'", flush=True)
     if raw_content is None:
+        print(f"[summary] ERROR: raw_content is None for section='{section_title}'", flush=True)
         return {"summary": content[:200], "keywords": []}
     raw = raw_content.strip()
+    print(f"[summary] raw response (first 300): {raw[:300]}", flush=True)
     try:
         result = json.loads(raw)
     except json.JSONDecodeError:
+        print(f"[summary] ERROR: JSON 파싱 실패 for section='{section_title}'", flush=True)
         result = {"summary": raw, "keywords": []}
 
     # 안전한 기본값
