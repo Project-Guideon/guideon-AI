@@ -1,6 +1,3 @@
-# IDE
-.idea/
-
 # virtual environments
 .guideon_AI/
 .venv/
@@ -15,8 +12,6 @@ __pycache__/
 
 # credentials & environment
 google_key.json
-google-credentials.json
-*.json
 .env
 
 # documentation
@@ -25,10 +20,4 @@ google-credentials.json
 # audio files
 *.wav
 *.mp3
-*.md
-!README.md
-
-# chunk files
-doc_1_chunks.txt
-doc_2_chunks.txt
-check_chunk.py
+API_SPEC.md
