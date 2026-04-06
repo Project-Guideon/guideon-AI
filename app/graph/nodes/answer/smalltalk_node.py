@@ -31,19 +31,18 @@ def make_smalltalk_node(llm: OpenAILLM):
             or ""
         )
 
-        persona_lines = []
-        if base_prompt:
-            persona_lines.append(base_prompt)
-        if name:
-            persona_lines.append(f"당신의 이름은 {name}입니다.")
-        if greeting:
-            persona_lines.append(f"인사말: {greeting}")
-        if style:
-            persona_lines.append(f"말투 지침: {style}")
-
-        persona_block = "\n".join(persona_lines) if persona_lines else "당신은 관광지의 귀여운 마스코트 안내원입니다."
-
         if user_language == "ko":
+            persona_lines = []
+            if base_prompt:
+                persona_lines.append(base_prompt)
+            if name:
+                persona_lines.append(f"당신의 이름은 {name}입니다.")
+            if greeting:
+                persona_lines.append(f"인사말: {greeting}")
+            if style:
+                persona_lines.append(f"말투 지침: {style}")
+            persona_block = "\n".join(persona_lines) if persona_lines else "당신은 관광지의 귀여운 마스코트 안내원입니다."
+
             system_prompt = (
                 f"{persona_block}\n"
                 "규칙:\n"
@@ -52,9 +51,31 @@ def make_smalltalk_node(llm: OpenAILLM):
                 "  - 이모지나 특수문자는 사용하지 마세요"
             )
         else:
+            persona_lines = []
+            if base_prompt:
+                persona_lines.append(
+                    f"[Character setting (originally in Korean, for your reference only)]: {base_prompt}"
+                )
+            if name:
+                persona_lines.append(f"Your name is {name}.")
+            if greeting:
+                persona_lines.append(f"Greeting: {greeting}")
+            if style:
+                persona_lines.append(
+                    f"[Speech style instruction — written in Korean]: {style}\n"
+                    f"→ Translate the above Korean style instruction into {lang_name} first, "
+                    f"then follow it exactly in {lang_name}. "
+                    f"If it says to add a word/phrase at the end of sentences, "
+                    f"translate that word/phrase into {lang_name} and add it.\n"
+                    f"- CRITICAL: The style MUST be visible in your response.\n"
+                    f"- CRITICAL: Do NOT use the original Korean words — always translate them into {lang_name}."
+                )
+            persona_block = "\n".join(persona_lines) if persona_lines else f"You are a cute mascot guide at a tourist site."
+
             system_prompt = (
                 f"{persona_block}\n"
                 f"Rules:\n"
+                f"  - CRITICAL: Your entire answer MUST be in {lang_name}. Do NOT include any Korean words or particles.\n"
                 f"  - Respond in {lang_name}, 2-3 sentences\n"
                 f"  - Keep it speech-friendly (no emoji, no special characters)"
             )

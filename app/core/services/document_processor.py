@@ -51,7 +51,7 @@ MAX_PDF_BYTES = 50 * 1024 * 1024
 # 청킹 파라미터 (Spring API에서 받지 않고 여기서 고정)
 MAX_CHUNK_SIZE = 600   # 섹션 최대 글자 수 (초과 시 추가 분할)
 MIN_CHUNK_SIZE = 80    # 섹션 최소 글자 수 (미달 시 앞 섹션과 병합)
-CHUNK_OVERLAP  = 100   # 섹션 간 겹치는 글자 수 (문맥 연속성 확보)
+CHUNK_OVERLAP  = 2   # 섹션 간 겹치는 글자 수 -> 문장 수로 변경(문맥 연속성 확보)
 
 
 def _process_v2_sync(doc_id: int, site_id: int, pdf_bytes: bytes) -> None:
@@ -77,7 +77,7 @@ def _process_v2_sync(doc_id: int, site_id: int, pdf_bytes: bytes) -> None:
         md_text,
         max_chunk_size=MAX_CHUNK_SIZE,
         min_chunk_size=MIN_CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
+        sentence_overlap=CHUNK_OVERLAP,
     )
     print(f"[processor] doc_id={doc_id} | 섹션 파싱 완료: {len(sections)}개", flush=True)
 

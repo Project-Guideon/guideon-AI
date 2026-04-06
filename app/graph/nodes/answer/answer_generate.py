@@ -72,19 +72,16 @@ def make_answer_generate_node(llm: OpenAILLM):
             or state.get("mascot_base_persona")
             or ""
         )
-        mascot_lines = []
-        if system_prompt_base:
-            mascot_lines.append(system_prompt_base)
-        if RAG_style:
-            mascot_lines.append(f"답변 스타일: {RAG_style}")
-        mascot_prefix = "\n".join(mascot_lines) + "\n" if mascot_lines else ""
-
-        # mascot 없을 때만 하드코딩 persona 표시 (있으면 mascot_prefix가 담당)
-        fallback_persona_ko = "" if mascot_prefix else "당신은 관광 안내 음성 도우미입니다.\n"
-        fallback_persona_foreign = "" if mascot_prefix else "You are a tourism guide voice assistant.\n"
-
         # ── 프롬프트 분기 (KO / Foreign) ───────────────────────────────
         if user_language == "ko":
+            mascot_lines = []
+            if system_prompt_base:
+                mascot_lines.append(system_prompt_base)
+            if RAG_style:
+                mascot_lines.append(f"답변 스타일: {RAG_style}")
+            mascot_prefix = "\n".join(mascot_lines) + "\n" if mascot_lines else ""
+            fallback_persona_ko = "" if mascot_prefix else "당신은 관광 안내 음성 도우미입니다.\n"
+
             system_prompt = (
                 f"{mascot_prefix}"
                 f"{fallback_persona_ko}"
@@ -102,11 +99,30 @@ def make_answer_generate_node(llm: OpenAILLM):
             )
         else:
             lang_name = _LANG_NAMES.get(user_language, user_language.upper())
+            mascot_lines = []
+            if system_prompt_base:
+                mascot_lines.append(
+                    f"[Character setting (originally in Korean, for your reference only)]: {system_prompt_base}"
+                )
+            if RAG_style:
+                mascot_lines.append(
+                    f"[Speech style (originally in Korean)]: {RAG_style}\n"
+                    f"→ You MUST apply this style in {lang_name}. "
+                    f"First, understand what the Korean instruction asks "
+                    f"(e.g. adding a catchphrase, sentence-ending particle, or tone). "
+                    f"Then, find the closest natural {lang_name} equivalent and USE it in your answer. "
+                    f"Do NOT skip the style — it must be visible in your response. "
+                    f"Do NOT use the original Korean words — always use {lang_name} equivalents."
+                )
+            mascot_prefix = "\n".join(mascot_lines) + "\n" if mascot_lines else ""
+            fallback_persona_foreign = "" if mascot_prefix else "You are a tourism guide voice assistant.\n"
+
             system_prompt = (
                 f"{mascot_prefix}"
                 f"{fallback_persona_foreign}"
                 f"Answer in {lang_name} using the Korean reference documents provided.\n"
                 "Rules:\n"
+                f"  - CRITICAL: Your entire answer MUST be in {lang_name}. Do NOT include any Korean words or particles.\n"
                 f"  - Respond in {lang_name}, 2-5 sentences, natural for speech\n"
                 "  - Base your answer ONLY on the Korean context below\n"
                 "  - Do NOT translate the answer from Korean — generate directly in the target language\n"

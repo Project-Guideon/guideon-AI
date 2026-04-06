@@ -44,14 +44,30 @@ def _build_event_messages(
 ) -> list[dict[str, str]]:
     candidate_json = json.dumps(candidate_infos, ensure_ascii=False, indent=2)
 
+    lang_name = _LANG_NAMES.get(user_language, user_language.upper())
+
     character_lines = []
     if system_prompt_base:
-        character_lines.append(system_prompt_base)
+        if user_language == "ko":
+            character_lines.append(system_prompt_base)
+        else:
+            character_lines.append(
+                f"[Character setting (originally in Korean, for your reference only)]: {system_prompt_base}"
+            )
     if answer_style:
-        character_lines.append(f"답변 스타일: {answer_style}")
+        if user_language == "ko":
+            character_lines.append(f"답변 스타일: {answer_style}")
+        else:
+            character_lines.append(
+                f"[Speech style instruction — written in Korean]: {answer_style}\n"
+                f"→ Translate the above Korean style instruction into {lang_name} first, "
+                f"then follow it exactly in {lang_name}. "
+                f"If it says to add a word/phrase at the end of sentences, "
+                f"translate that word/phrase into {lang_name} and add it.\n"
+                f"- CRITICAL: The style MUST be visible in your response.\n"
+                f"- CRITICAL: Do NOT use the original Korean words — always translate them into {lang_name}."
+            )
     character_instruction = "\n".join(character_lines).strip()
-
-    lang_name = _LANG_NAMES.get(user_language, user_language.upper())
     lang_instruction = (
         "answer는 반드시 한국어로 작성하세요. 2~3문장으로 자연스럽고 음성 안내처럼 답변하세요. "
         "이모지나 특수문자는 사용하지 마세요."
