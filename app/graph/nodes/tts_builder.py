@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from app.core.services.tts_google import GoogleTTS
+from app.core.services.tts_google import GoogleTTS, TTSConfig
 from app.graph.state import GraphState
 
 # 언어별 Google TTS language_code 매핑
@@ -58,18 +58,19 @@ def make_tts_builder_node(tts: GoogleTTS):
             )
 
         tts_text = _process_for_tts(answer_text, user_language)
+
+        # user_language 에 맞는 TTS 언어 코드 선택
         tts_lang = _TTS_LANG_MAP.get(user_language, "ko-KR")
 
-        tts_audio = tts.synthesize(
-            tts_text,
-            language_code=tts_lang,
-        )
+        # 기본 TTS 가 ko-KR 이면 그대로, 다른 언어면 동적으로 새 인스턴스 생성
+        if tts_lang == tts.config.language_code:
+            active_tts = tts
+        else:
+            active_tts = GoogleTTS(TTSConfig(language_code=tts_lang))
 
+        tts_audio = active_tts.synthesize(tts_text)
 
         trace = dict(state.get("trace") or {})
-        flow = list(trace.get("_flow") or [])
-        flow.append("tts_builder")
-        trace["_flow"] = flow
         trace["tts_builder"] = {
             "tts_lang": tts_lang,
             "tts_text_length": len(tts_text),

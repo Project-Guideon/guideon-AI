@@ -28,9 +28,6 @@ def normalize_node(state: GraphState) -> dict:
     text = re.sub(r"\s+", " ", text).strip()
 
     trace = dict(state.get("trace") or {})
-    flow = list(trace.get("_flow") or [])
-    flow.append("normalize")
-    trace["_flow"] = flow
     trace["normalize"] = {"normalized_text": text}
 
     return {"normalized_text": text, "trace": trace}

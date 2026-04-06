@@ -114,9 +114,6 @@ def make_retrieve_node(rag: PgVectorRAG):
         max_sim = max((c["similarity"] for c in chunks_dict), default=0.0)
 
         trace = dict(state.get("trace") or {})
-        flow = list(trace.get("_flow") or [])
-        flow.append("retrieve")
-        trace["_flow"] = flow
         trace["retrieve"] = {
             "query": query,
             "top_k": top_k,

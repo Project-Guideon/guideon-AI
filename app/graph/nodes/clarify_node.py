@@ -59,9 +59,6 @@ def make_clarify_node(llm: OpenAILLM):
             )
 
         trace = dict(state.get("trace") or {})
-        flow = list(trace.get("_flow") or [])
-        flow.append("clarify")
-        trace["_flow"] = flow
         trace["clarify"] = {"user_language": user_language, "clarify_text": clarify_text}
 
         return {"answer_text": clarify_text, "trace": trace}
