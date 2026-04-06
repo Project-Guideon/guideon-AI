@@ -62,6 +62,7 @@ class GoogleSTT:
             language_code=self.config.primary_language,
             alternative_language_codes=self.config.alternative_languages,
             enable_automatic_punctuation=self.config.enable_punctuation,
+            model="latest_long",  # 최신 모델 사용
         )
 
         resp = self.client.recognize(config=cfg, audio=audio)
@@ -107,6 +108,7 @@ class GoogleSTT:
             language_code=primary_language,
             alternative_language_codes=self.config.alternative_languages,
             enable_automatic_punctuation=enable_punctuation,
+            model="latest_long",
         )
         streaming_cfg = speech_types.StreamingRecognitionConfig(
             config=recog_cfg,

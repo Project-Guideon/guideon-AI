@@ -1,42 +1,49 @@
-# services/llm_openai.py
 from __future__ import annotations
-import os
-from dataclasses import dataclass
-from typing import List
 
-from openai import OpenAI
+import os
+import re
+from dataclasses import dataclass
+from typing import List, AsyncIterator
+
+from openai import OpenAI, AsyncOpenAI
 from app.core.services.rag_pgvector import RetrievedChunk
 from langsmith.wrappers import wrap_openai
+
 
 @dataclass
 class LLMConfig:
     model: str = "gpt-4o-mini"
-    temperature: float = 0.2 #낮을수록  RAG 답변이 더 사실적이고 일관되게 나옴 (0.0~1.0)
-    max_tokens: int = 150  # TTS용: 짧고 명확하게 (150 ≈ 2~3문장)
+    temperature: float = 0.2
+    max_tokens: int = 150
+
+
+_SENTENCE_RE = re.compile(
+    r"(.+?[.!?]|.+?다\.|.+?요\.|.+?니다\.)",
+    re.DOTALL,
+)
 
 
 class OpenAILLM:
     def __init__(self, cfg: LLMConfig = None):
         self.cfg = cfg or LLMConfig()
-        base_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=60.0)
-        self.client = wrap_openai(base_client)
 
-    def chat(self, messages: list, max_tokens: int = None) -> str:
-        """범용 LLM 호출 — messages 리스트를 그대로 받는다.
-        노드별(intent_gate, translate, query_rewrite 등)로 직접 사용."""
-        response = self.client.chat.completions.create(
-            model=self.cfg.model,
-            messages=messages,
-            temperature=self.cfg.temperature,
-            max_tokens=max_tokens or self.cfg.max_tokens,
+        api_key = os.getenv("OPENAI_API_KEY")
+
+        # 동기 호출용
+        self.sync_client = wrap_openai(
+            OpenAI(api_key=api_key, timeout=60.0)
         )
-        return (response.choices[0].message.content or "").strip()
 
-    def generate(self, query: str, contexts: List[RetrievedChunk]) -> str:
-        #query는 stt로 만들어진 질문 텍스트, contexts는 rag로 검색된 관련 정보 리스트
-        if not contexts:
-            return "관련 정보를 찾을 수 없습니다."
+        # 비동기 스트리밍용
+        self.async_client = wrap_openai(
+            AsyncOpenAI(api_key=api_key, timeout=60.0)
+        )
 
+    def _build_messages(
+        self,
+        query: str,
+        contexts: List[RetrievedChunk],
+    ) -> list[dict[str, str]]:
         context = "\n\n".join(
             [f"[청크 {i+1}]\n{c.content}" for i, c in enumerate(contexts)]
         )
@@ -54,14 +61,90 @@ class OpenAILLM:
             "위 정보를 기반으로 질문에 답변해주세요."
         )
 
-        response = self.client.chat.completions.create(
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ]
+
+    # ---------------------------------
+    # 기본 chat 호출 (동기)
+    # ---------------------------------
+    def chat(self, messages: list, max_tokens: int = None) -> str:
+        response = self.sync_client.chat.completions.create(
             model=self.cfg.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
+            messages=messages,
+            temperature=self.cfg.temperature,
+            max_tokens=max_tokens or self.cfg.max_tokens,
+        )
+        return (response.choices[0].message.content or "").strip()
+
+    # ---------------------------------
+    # 일반 답변 생성 (동기)
+    # ---------------------------------
+    def generate(self, query: str, contexts: List[RetrievedChunk]) -> str:
+        if not contexts:
+            return "관련 정보를 찾을 수 없습니다."
+
+        response = self.sync_client.chat.completions.create(
+            model=self.cfg.model,
+            messages=self._build_messages(query, contexts),
             temperature=self.cfg.temperature,
             max_tokens=self.cfg.max_tokens,
         )
 
         return (response.choices[0].message.content or "").strip()
+
+    # ---------------------------------
+    # LLM 토큰 스트리밍 (비동기)
+    # ---------------------------------
+    async def stream_generate(
+        self,
+        query: str,
+        contexts: List[RetrievedChunk],
+    ) -> AsyncIterator[str]:
+        if not contexts:
+            yield "관련 정보를 찾을 수 없습니다."
+            return
+
+        stream = await self.async_client.chat.completions.create(
+            model=self.cfg.model,
+            messages=self._build_messages(query, contexts),
+            temperature=self.cfg.temperature,
+            max_tokens=self.cfg.max_tokens,
+            stream=True,
+        )
+
+        async for event in stream:
+            if not event.choices:
+                continue
+
+            delta = event.choices[0].delta.content or ""
+            if delta:
+                yield delta
+
+    # ---------------------------------
+    # 문장 단위 스트리밍 (TTS용)
+    # ---------------------------------
+    async def stream_generate_sentences(
+        self,
+        query: str,
+        contexts: List[RetrievedChunk],
+    ) -> AsyncIterator[str]:
+        buffer = ""
+
+        async for delta in self.stream_generate(query, contexts):
+            buffer += delta
+
+            while True:
+                m = _SENTENCE_RE.match(buffer)
+                if not m:
+                    break
+
+                sentence = m.group(1).strip()
+                buffer = buffer[m.end():].lstrip()
+
+                if sentence:
+                    yield sentence
+
+        if buffer.strip():
+            yield buffer.strip()

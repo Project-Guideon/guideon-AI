@@ -43,6 +43,9 @@ def make_translate_node(llm: OpenAILLM):
             retrieval_query_ko = text
 
         trace = dict(state.get("trace") or {})
+        flow = list(trace.get("_flow") or [])
+        flow.append("translate_ko")
+        trace["_flow"] = flow
         trace["translate"] = {
             "original": text,
             "user_language": user_language,
