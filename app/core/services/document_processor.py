@@ -37,6 +37,7 @@ from app.core.DB.PDF2db_v2 import (
     pdf_to_markdown,
     parse_markdown_sections,
     generate_search_summary,
+    build_search_text,
     MODEL_NAME,
     client as openai_client_v2,
 )
@@ -44,9 +45,6 @@ from app.core.DB.PDF2db_v2 import (
 # Spring Core 서비스 주소 (콜백 전송 대상)
 # Docker 환경에서는 .env의 CORE_BASE_URL=http://host.docker.internal:8080 사용
 CORE_BASE_URL = os.getenv("CORE_BASE_URL", "http://localhost:8080")
-
-# PDF 최대 크기 (50MB) - 초과 시 처리 거부
-MAX_PDF_BYTES = 50 * 1024 * 1024
 
 # 청킹 파라미터 (Spring API에서 받지 않고 여기서 고정)
 MAX_CHUNK_SIZE = 600   # 섹션 최대 글자 수 (초과 시 추가 분할)
@@ -97,7 +95,11 @@ def _process_v2_sync(doc_id: int, site_id: int, pdf_bytes: bytes) -> None:
         keywords = summary_result["keywords"]
 
         # 요약 + 키워드를 합쳐 임베딩 → 검색 시 의미 기반 매칭 성능 향상
-        search_text = f"{section_title} {summary} {' '.join(keywords)}"
+        search_text = build_search_text(
+            section_title=section_title,
+            summary=summary,
+            keywords=keywords,
+        )
         emb = openai_client_v2.embeddings.create(
             model=MODEL_NAME,
             input=search_text,
@@ -166,10 +168,6 @@ async def process_pdf_from_url(
             resp = await http.get(storage_url)
             resp.raise_for_status()
             pdf_bytes = resp.content
-
-        # PDF 크기 제한 (50MB 초과 시 처리 거부)
-        if len(pdf_bytes) > MAX_PDF_BYTES:
-            raise ValueError(f"PDF 크기 초과: {len(pdf_bytes)} bytes (최대 {MAX_PDF_BYTES} bytes)")
 
         print(f"[processor] doc_id={doc_id} | PDF 다운로드 완료 ({len(pdf_bytes)} bytes)", flush=True)
 
