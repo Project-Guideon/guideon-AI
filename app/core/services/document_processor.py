@@ -189,7 +189,13 @@ async def process_pdf_from_url(
         print(f"[processor] doc_id={doc_id} 처리 실패: {type(e).__name__}", flush=True)
         traceback.print_exc()
         # 실패 사유를 Core에 전달 → tb_document.failed_reason 컬럼에 저장됨
-        await _callback_core(site_id, doc_id, "FAILED", str(e))
+        await _callback_core(site_id, doc_id, "FAILED", _sanitize_failed_reason(str(e)))
+
+
+def _sanitize_failed_reason(reason: str, max_len: int = 500) -> str:
+    p = urlsplit(reason)
+    scrubbed = urlunsplit((p.scheme, p.netloc, p.path, "", "")) if p.scheme and p.netloc else reason
+    return scrubbed[:max_len]
 
 
 async def _callback_core(
@@ -201,20 +207,24 @@ async def _callback_core(
     대상 엔드포인트: PATCH /internal/v1/sites/{siteId}/documents/{docId}/status
     요청 바디: {"status": "PROCESSING"|"COMPLETED"|"FAILED", "failed_reason": "..."}
 
-    콜백 실패 시 예외를 상위로 전파하지 않고 로그만 남김.
-    (콜백 실패가 전체 처리 결과에 영향을 주지 않도록)
+    콜백 실패 시 최대 3회 재시도 (지수 백오프). 최종 실패 시 로그만 남김.
     """
     payload: dict = {"status": status}
     if failed_reason:
         payload["failed_reason"] = failed_reason
 
-    try:
-        async with httpx.AsyncClient() as http:
-            resp = await http.patch(
-                f"{CORE_BASE_URL}/internal/v1/sites/{site_id}/documents/{doc_id}/status",
-                json=payload,
-                timeout=10.0,
-            )
-            resp.raise_for_status()
-    except Exception as e:
-        print(f"[processor] Core 콜백 실패 doc_id={doc_id} status={status}: {type(e).__name__}", flush=True)
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient() as http:
+                resp = await http.patch(
+                    f"{CORE_BASE_URL}/internal/v1/sites/{site_id}/documents/{doc_id}/status",
+                    json=payload,
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                return
+        except httpx.HTTPError as e:
+            if attempt == 2:
+                print(f"[processor] Core 콜백 최종 실패 doc_id={doc_id} status={status}: {type(e).__name__}", flush=True)
+                return
+            await asyncio.sleep(0.5 * (2 ** attempt))
