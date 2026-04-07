@@ -13,6 +13,9 @@ def make_stt_node(stt: GoogleSTT):
         result = stt.transcribe(audio)
 
         trace = dict(state.get("trace") or {})
+        flow = list(trace.get("_flow") or [])
+        flow.append("stt")
+        trace["_flow"] = flow
         trace["stt"] = {
             "transcript": result.transcript,
             "language_code": result.language_code,

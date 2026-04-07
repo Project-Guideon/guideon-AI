@@ -30,6 +30,9 @@ def context_pack_node(state: GraphState) -> dict:
     packed = unique[:_MAX_CONTEXT_CHUNKS]
 
     trace = dict(state.get("trace") or {})
+    flow = list(trace.get("_flow") or [])
+    flow.append("context_pack")
+    trace["_flow"] = flow
     trace["context_pack"] = {
         "before": len(chunks),
         "after": len(packed),
