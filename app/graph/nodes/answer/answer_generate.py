@@ -2,15 +2,7 @@ from __future__ import annotations
 
 from app.core.services.llm_openai import OpenAILLM
 from app.graph.state import GraphState
-
-_LANG_NAMES = {
-    "ko": "Korean",
-    "en": "English",
-    "zh": "Chinese",
-    "ja": "Japanese",
-    "fr": "French",
-    "es": "Spanish",
-}
+from app.graph.nodes.utils import LANG_NAMES, build_messages, append_trace_flow, build_persona_block, get_language
 
 _NO_RESULT_MSG = {
     "ko": "관련 정보를 찾을 수 없습니다. 더 구체적으로 말씀해 주시겠어요?",
@@ -41,18 +33,13 @@ def make_answer_generate_node(llm: OpenAILLM):
     def answer_generate_node(state: GraphState) -> dict:
         text: str = state.get("normalized_text", "")
         chunks: list = state.get("retrieved_chunks") or []
-        user_language: str = state.get("user_language", "ko")
+        user_language = get_language(state)
+        lang_name = LANG_NAMES.get(user_language, user_language.upper())
 
-        # ── 빈 검색 결과 → 고정 응답으로 즉시 종료 ─────────────────────
+        # 빈 검색 결과 → 고정 응답으로 즉시 종료
         if not chunks:
-            answer = _NO_RESULT_MSG.get(
-                user_language,
-                _NO_RESULT_MSG["en"],
-            )
-            trace = dict(state.get("trace") or {})
-            flow = list(trace.get("_flow") or [])
-            flow.append("answer_generate")
-            trace["_flow"] = flow
+            answer = _NO_RESULT_MSG.get(user_language, _NO_RESULT_MSG["en"])
+            trace = append_trace_flow(state, "answer_generate")
             trace["answer_generate"] = {
                 "user_language": user_language,
                 "chunks_used": 0,
@@ -60,31 +47,32 @@ def make_answer_generate_node(llm: OpenAILLM):
             }
             return {"answer_text": answer, "trace": trace}
 
-        # ── 컨텍스트 조립 ──────────────────────────────────────────────
+        # 컨텍스트 조립
         context_str = "\n\n".join(
             f"[문서 {i + 1}]\n{c['content']}" for i, c in enumerate(chunks)
         )
 
-        # ── 마스코트 prefix 조립 ────────────────────────────────────────
+        # 마스코트 페르소나 블록 조립 (ko/foreign 분기는 build_persona_block 내부에서 처리)
         system_prompt_base: str = state.get("system_prompt") or ""
         RAG_style: str = (
             state.get("mascot_RAG_style")
             or state.get("mascot_base_persona")
             or ""
         )
-        # ── 프롬프트 분기 (KO / Foreign) ───────────────────────────────
-        if user_language == "ko":
-            mascot_lines = []
-            if system_prompt_base:
-                mascot_lines.append(system_prompt_base)
-            if RAG_style:
-                mascot_lines.append(f"답변 스타일: {RAG_style}")
-            mascot_prefix = "\n".join(mascot_lines) + "\n" if mascot_lines else ""
-            fallback_persona_ko = "" if mascot_prefix else "당신은 관광 안내 음성 도우미입니다.\n"
+        persona_block = build_persona_block(
+            base_prompt=system_prompt_base,
+            style=RAG_style,
+            user_language=user_language,
+            lang_name=lang_name,
+            ko_style_label="답변 스타일",
+            ko_fallback="당신은 관광 안내 음성 도우미입니다.",
+            foreign_fallback="You are a tourism guide voice assistant.",
+        )
 
+        # 노드별 고유 규칙 + context 조립
+        if user_language == "ko":
             system_prompt = (
-                f"{mascot_prefix}"
-                f"{fallback_persona_ko}"
+                f"{persona_block}\n"
                 "제공된 참고 정보(context)만 근거로 답변하세요.\n"
                 "규칙:\n"
                 "  - 한국어로 2~5문장, 음성으로 읽기 좋게 자연스럽게 작성\n"
@@ -98,28 +86,8 @@ def make_answer_generate_node(llm: OpenAILLM):
                 "위 정보를 바탕으로 답변해 주세요."
             )
         else:
-            lang_name = _LANG_NAMES.get(user_language, user_language.upper())
-            mascot_lines = []
-            if system_prompt_base:
-                mascot_lines.append(
-                    f"[Character setting (originally in Korean, for your reference only)]: {system_prompt_base}"
-                )
-            if RAG_style:
-                mascot_lines.append(
-                    f"[Speech style (originally in Korean)]: {RAG_style}\n"
-                    f"→ You MUST apply this style in {lang_name}. "
-                    f"First, understand what the Korean instruction asks "
-                    f"(e.g. adding a catchphrase, sentence-ending particle, or tone). "
-                    f"Then, find the closest natural {lang_name} equivalent and USE it in your answer. "
-                    f"Do NOT skip the style — it must be visible in your response. "
-                    f"Do NOT use the original Korean words — always use {lang_name} equivalents."
-                )
-            mascot_prefix = "\n".join(mascot_lines) + "\n" if mascot_lines else ""
-            fallback_persona_foreign = "" if mascot_prefix else "You are a tourism guide voice assistant.\n"
-
             system_prompt = (
-                f"{mascot_prefix}"
-                f"{fallback_persona_foreign}"
+                f"{persona_block}\n"
                 f"Answer in {lang_name} using the Korean reference documents provided.\n"
                 "Rules:\n"
                 f"  - CRITICAL: Your entire answer MUST be in {lang_name}. Do NOT include any Korean words or particles.\n"
@@ -136,23 +104,15 @@ def make_answer_generate_node(llm: OpenAILLM):
                 f"Answer in {lang_name}:"
             )
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_msg},
-        ]
+        # system → 이전 대화 내역(chat_history) → 현재 질문 순으로 조립
+        messages = build_messages(state, system_prompt, user_msg)
 
         try:
             answer = llm.chat(messages, max_tokens=150)
         except Exception:
-            answer = _ERROR_MSG.get(
-                user_language,
-                _ERROR_MSG["en"],
-            )
+            answer = _ERROR_MSG.get(user_language, _ERROR_MSG["en"])
 
-        trace = dict(state.get("trace") or {})
-        flow = list(trace.get("_flow") or [])
-        flow.append("answer_generate")
-        trace["_flow"] = flow
+        trace = append_trace_flow(state, "answer_generate")
         trace["answer_generate"] = {
             "user_language": user_language,
             "chunks_used": len(chunks),
