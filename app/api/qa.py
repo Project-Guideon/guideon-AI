@@ -103,7 +103,7 @@ async def internal_qa(req: InternalQaRequest):
         "mascot_struct_db_style": (req.promptConfig.struct_db_style or "") if req.promptConfig else "",
         "mascot_RAG_style":       (req.promptConfig.RAG_style or "") if req.promptConfig else "",
         "mascot_event_style":     (req.promptConfig.event_node_style or "") if req.promptConfig else "",
-        "chat_history": load_chat_history(req.sessionId),
+        "chat_history": await load_chat_history(req.sessionId),
         "top_k": 5,
         "retry_count": 0,
         "trace": {},
