@@ -301,9 +301,14 @@ def generate_search_summary(
         # 1) 제어 문자 제거
         text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
         # 2) 서로게이트 문자 제거 (JSON 직렬화 깨뜨리는 원인)
-        text = text.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+        text = text.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='ignore')
         # 3) JSON에서 문제 되는 특수 유니코드 제거 (BOM, 제로폭 문자 등)
         text = re.sub(r'[\ufffe\uffff\ufeff\ufdd0-\ufdef]', '', text)
+        # 4) JSON 직렬화 가능한지 최종 확인
+        try:
+            json.dumps(text)
+        except (ValueError, UnicodeEncodeError):
+            text = text.encode('ascii', errors='ignore').decode('ascii')
         return text
 
     content = _sanitize(safe_content)
@@ -336,13 +341,25 @@ def generate_search_summary(
 
 중요: keywords에는 텍스트에 나오는 고유명사(인물, 장소, 사건)를 모두 포함해야 합니다. 누락하지 마세요."""
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
+    # 요청 전 JSON 직렬화 검증
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    try:
+        json.dumps(messages, ensure_ascii=False)
+    except (ValueError, UnicodeEncodeError) as e:
+        print(f"[summary] WARNING: 메시지 JSON 직렬화 실패, ASCII로 폴백: {e}", flush=True)
+        user_prompt = user_prompt.encode('ascii', errors='ignore').decode('ascii')
+        messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
-        ],
-        #temperature=0.1, temperature 지원안함 
+        ]
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        #temperature=0.1, temperature 지원안함
         #max_tokens=500, gpt-5-mini는 max_tokens 대신 max_completion_tokens 사용
         # 제한을 안두는게 맞을듯max_completion_tokens=2000, #질문도 포함해서 4096 토큰까지 지원하므로 알아서 설정하게
         response_format={"type": "json_object"},
