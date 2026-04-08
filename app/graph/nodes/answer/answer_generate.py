@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.core.services.llm_openai import OpenAILLM
 from app.graph.state import GraphState
-from app.graph.nodes.utils import LANG_NAMES, build_messages, append_trace_flow, build_persona_block
+from app.graph.nodes.utils import LANG_NAMES, build_messages, append_trace_flow, build_persona_block, get_language
 
 _NO_RESULT_MSG = {
     "ko": "관련 정보를 찾을 수 없습니다. 더 구체적으로 말씀해 주시겠어요?",
@@ -33,7 +33,7 @@ def make_answer_generate_node(llm: OpenAILLM):
     def answer_generate_node(state: GraphState) -> dict:
         text: str = state.get("normalized_text", "")
         chunks: list = state.get("retrieved_chunks") or []
-        user_language: str = state.get("user_language", "ko")
+        user_language = get_language(state)
         lang_name = LANG_NAMES.get(user_language, user_language.upper())
 
         # 빈 검색 결과 → 고정 응답으로 즉시 종료

@@ -8,7 +8,7 @@ from openai import APIError, APIConnectionError, APITimeoutError, RateLimitError
 
 from app.core.services.llm_openai import OpenAILLM
 from app.graph.state import GraphState
-from app.graph.nodes.utils import LANG_NAMES, build_messages, append_trace_flow, build_persona_block
+from app.graph.nodes.utils import LANG_NAMES, build_messages, append_trace_flow, build_persona_block, get_language
 
 
 def _serialize_daily_info(idx: int, d: dict[str, Any]) -> dict[str, Any]:
@@ -90,7 +90,7 @@ def _build_event_messages(
 def make_event_node(llm: OpenAILLM):
     def event_node(state: GraphState) -> dict:
         text: str = (state.get("normalized_text") or "").strip()
-        user_language: str = state.get("user_language", "ko")
+        user_language = get_language(state)
         daily_infos: list[dict[str, Any]] = state.get("daily_infos") or []
         site_id: int = state.get("site_id", 1)
 

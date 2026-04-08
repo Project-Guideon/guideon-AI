@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.core.services.llm_openai import OpenAILLM
 from app.graph.state import GraphState
-from app.graph.nodes.utils import LANG_NAMES, build_messages, append_trace_flow, build_persona_block
+from app.graph.nodes.utils import LANG_NAMES, build_messages, append_trace_flow, build_persona_block, get_language
 
 
 def make_smalltalk_node(llm: OpenAILLM):
@@ -14,7 +14,7 @@ def make_smalltalk_node(llm: OpenAILLM):
 
     def smalltalk_node(state: GraphState) -> dict:
         text: str = state.get("normalized_text", "")
-        user_language: str = state.get("user_language", "ko")
+        user_language = get_language(state)
         lang_name = LANG_NAMES.get(user_language, user_language.upper())
 
         base_prompt = state.get("system_prompt") or ""

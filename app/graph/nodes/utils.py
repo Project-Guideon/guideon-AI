@@ -18,13 +18,30 @@ def build_messages(state: GraphState, system_content: str, user_content: str) ->
 
     system → 이전 대화 내역(chat_history) → 현재 질문 순으로 조립.
     chat_history는 Redis에서 로드되어 state에 담겨 있음.
+    load_chat_history에서 1차 검증을 하지만, 방어적으로 재검증.
     """
-    history: list[dict] = state.get("chat_history") or []
+    raw_history = state.get("chat_history") or []
+    history: list[dict[str, str]] = [
+        {"role": item["role"], "content": item["content"]}
+        for item in raw_history
+        if isinstance(item, dict)
+        and item.get("role") in {"user", "assistant"}
+        and isinstance(item.get("content"), str)
+    ]
     return [
         {"role": "system", "content": system_content},
         *history,
         {"role": "user", "content": user_content},
     ]
+
+
+def get_language(state: GraphState) -> str:
+    """state에서 user_language를 안전하게 추출.
+
+    None이거나 빈 문자열이면 "ko" 반환.
+    """
+    lang = state.get("user_language", "ko")
+    return lang if isinstance(lang, str) and lang else "ko"
 
 
 def append_trace_flow(state: GraphState, node_name: str) -> dict:
