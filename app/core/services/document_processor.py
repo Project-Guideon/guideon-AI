@@ -80,7 +80,7 @@ def _process_v2_sync(doc_id: int, site_id: int, pdf_bytes: bytes) -> None:
     print(f"[processor] doc_id={doc_id} | 섹션 파싱 완료: {len(sections)}개", flush=True)
 
     # ── STEP 3. 섹션별 GPT 요약 + 임베딩 생성 ───────────────────────────────
-    # - generate_search_summary: GPT-4o로 섹션 요약 + 키워드 추출
+    # - generate_search_summary: GPT-5o-mini로 섹션 요약 + 키워드 추출
     # - 임베딩 대상: "섹션제목 + 요약 + 키워드" 합성 텍스트
     #   (원문 대신 요약 텍스트를 임베딩하여 검색 정확도 향상)
     # - 임베딩 모델: MODEL_NAME (PDF2db_v2.py에서 정의)
