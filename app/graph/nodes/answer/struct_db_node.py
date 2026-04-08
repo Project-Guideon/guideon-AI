@@ -49,7 +49,11 @@ def make_struct_db_node(llm: OpenAILLM):
 
         # 마스코트 페르소나 블록 조립 (ko/foreign 분기는 build_persona_block 내부에서 처리)
         name = state.get("mascot_name") or ""
-        style = state.get("mascot_struct_db_style") or ""
+        style = (
+            state.get("mascot_struct_db_style")
+            or state.get("mascot_base_persona")
+            or ""
+        )
         persona_block = build_persona_block(
             base_prompt=system_prompt,
             style=style,
