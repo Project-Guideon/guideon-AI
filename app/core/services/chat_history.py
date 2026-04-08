@@ -12,7 +12,14 @@ _client: redis.Redis | None = None
 def _get_redis() -> redis.Redis:
     global _client
     if _client is None:
-        _client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+        _client = redis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            decode_responses=True,
+            socket_connect_timeout=1,   # 연결 타임아웃 1초
+            socket_timeout=2,           # 읽기 타임아웃 2초
+            health_check_interval=30,   # 30초마다 연결 상태 확인
+        )
     return _client
 
 
@@ -26,7 +33,20 @@ def load_chat_history(session_id: str) -> list[dict]:
         r = _get_redis()
         key = f"chat:{session_id}"
         items = r.lrange(key, -(CHAT_HISTORY_MAX_TURNS * 2), -1)
-        history = [json.loads(item) for item in items]
+
+        # role/content 유효성 검증 — 오염 데이터가 GPT 메시지에 섞이는 것 방지
+        history = []
+        for item in items:
+            try:
+                msg = json.loads(item)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role")
+            content = msg.get("content")
+            if role in {"user", "assistant"} and isinstance(content, str):
+                history.append({"role": role, "content": content})
 
         print(f"[ChatHistory] 조회: session_id={session_id}, key={key}, count={len(history)}")
         for i, msg in enumerate(history):
