@@ -65,27 +65,26 @@ def _detect_inline_headings(pdf_bytes: bytes) -> Tuple[Set[str], Set[str]]:
         tmp_path = tmp.name
 
     try:
-        doc = fitz.open(tmp_path)
-        all_spans = []
+        with fitz.open(tmp_path) as doc:
+            all_spans = []
 
-        for page_idx in range(len(doc)):
-            page = doc[page_idx]
-            for block in page.get_text("dict")["blocks"]:
-                if block["type"] != 0:
-                    continue
-                for line in block["lines"]:
-                    for span in line["spans"]:
-                        text = span["text"].strip()
-                        if not text:
-                            continue
-                        all_spans.append({
-                            "text": text,
-                            "size": round(span["size"], 1),
-                            "font": span.get("font", ""),
-                            "bbox": span["bbox"],
-                            "page": page_idx,
-                        })
-        doc.close()
+            for page_idx in range(len(doc)):
+                page = doc[page_idx]
+                for block in page.get_text("dict")["blocks"]:
+                    if block["type"] != 0:
+                        continue
+                    for line in block["lines"]:
+                        for span in line["spans"]:
+                            text = span["text"].strip()
+                            if not text:
+                                continue
+                            all_spans.append({
+                                "text": text,
+                                "size": round(span["size"], 1),
+                                "font": span.get("font", ""),
+                                "bbox": span["bbox"],
+                                "page": page_idx,
+                            })
     finally:
         os.unlink(tmp_path)
 
@@ -391,10 +390,9 @@ def pdf_to_markdown(pdf_bytes: bytes) -> str:
         tmp.write(pdf_bytes)
         tmp_path = tmp.name
     try:
-        doc = fitz.open(tmp_path)
-        fitz_plain = [_extract_fitz_page_text(doc, i) for i in range(len(doc))]
-        fitz_md = [_fitz_page_to_markdown(doc[i]) for i in range(len(doc))]
-        doc.close()
+        with fitz.open(tmp_path) as doc:
+            fitz_plain = [_extract_fitz_page_text(doc, i) for i in range(len(doc))]
+            fitz_md = [_fitz_page_to_markdown(doc[i]) for i in range(len(doc))]
     finally:
         os.unlink(tmp_path)
 
