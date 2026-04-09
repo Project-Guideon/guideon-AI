@@ -16,6 +16,7 @@ from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field, ConfigDict
 
 from app.core.dependencies import traced_voice_run, traced_text_run, text_pipeline
+from app.core.services.chat_history import load_chat_history
 
 router = APIRouter()
 
@@ -102,6 +103,7 @@ async def internal_qa(req: InternalQaRequest):
         "mascot_struct_db_style": (req.promptConfig.struct_db_style or "") if req.promptConfig else "",
         "mascot_RAG_style":       (req.promptConfig.RAG_style or "") if req.promptConfig else "",
         "mascot_event_style":     (req.promptConfig.event_node_style or "") if req.promptConfig else "",
+        "chat_history": await load_chat_history(req.sessionId),
         "top_k": 5,
         "retry_count": 0,
         "trace": {},
