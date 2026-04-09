@@ -32,3 +32,5 @@ google-credentials.json
 doc_1_chunks.txt
 doc_2_chunks.txt
 check_chunk.py
+
+debug_md_dump/
