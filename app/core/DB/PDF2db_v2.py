@@ -559,9 +559,11 @@ def parse_markdown_sections(
             content_start = match.start()
             content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
             body = md_text[content_start:content_end].strip()
-            # 이전 섹션에 본문 병합
-            if sections and body:
-                sections[-1]["content"] = f"{sections[-1]['content']}\n\n{body}".strip()
+            if body:
+                if sections:
+                    sections[-1]["content"] = f"{sections[-1]['content']}\n\n{body}".strip()
+                else:
+                    sections.append({"section_title": f"섹션 {i+1}", "content": body, "level": 0})
             continue
 
         if not title:
@@ -572,8 +574,11 @@ def parse_markdown_sections(
             content_start = match.end()
             content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
             body = md_text[content_start:content_end].strip()
-            if sections and body:
-                sections[-1]["content"] = f"{sections[-1]['content']}\n\n{body}".strip()
+            if body:
+                if sections:
+                    sections[-1]["content"] = f"{sections[-1]['content']}\n\n{body}".strip()
+                else:
+                    sections.append({"section_title": f"섹션 {i+1}", "content": body, "level": 0})
             continue
 
         content_start = match.end()
