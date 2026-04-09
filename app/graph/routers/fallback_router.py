@@ -4,6 +4,8 @@ from typing import List
 
 from app.graph.state import GraphState
 
+ALLOWED_FALLBACK_NEXT = {"done", "smalltalk", "event", "struct_db", "retrieve", "translate_ko", "clarify"}
+
 
 # ── fallback_dispatch 노드 ────────────────────────────────────────────────────
 
@@ -58,8 +60,10 @@ def fallback_dispatch_node(state: GraphState) -> dict:
     # RAG 진입 시 language 분기
     if next_intent == "rag":
         fallback_next = "retrieve" if language_code == "ko" else "translate_ko"
-    else:
+    elif next_intent in {"smalltalk", "event", "struct_db"}:
         fallback_next = next_intent
+    else:
+        fallback_next = "clarify"
 
     entry = {
         "action": "fallback",
@@ -95,4 +99,5 @@ def fallback_router(state: GraphState) -> str:
         "struct_db"    → struct_db 노드
         "clarify"      → clarify 노드
     """
-    return state.get("fallback_next", "clarify")
+    nxt = state.get("fallback_next", "clarify")
+    return nxt if nxt in ALLOWED_FALLBACK_NEXT else "clarify"
