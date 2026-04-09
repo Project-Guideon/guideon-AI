@@ -49,7 +49,7 @@ CORE_BASE_URL = os.getenv("CORE_BASE_URL", "http://localhost:8080")
 # 청킹 파라미터 (Spring API에서 받지 않고 여기서 고정)
 MAX_CHUNK_SIZE = 600   # 섹션 최대 글자 수 (초과 시 추가 분할)
 MIN_CHUNK_SIZE = 80    # 섹션 최소 글자 수 (미달 시 앞 섹션과 병합)
-CHUNK_OVERLAP  = 2   # 섹션 간 겹치는 글자 수 -> 문장 수로 변경(문맥 연속성 확보)
+CHUNK_OVERLAP  = 2   # 섹션 간 overlap 문장 수 (문맥 연속성 확보)
 
 
 def _process_v2_sync(doc_id: int, site_id: int, pdf_bytes: bytes) -> None:
@@ -80,7 +80,7 @@ def _process_v2_sync(doc_id: int, site_id: int, pdf_bytes: bytes) -> None:
     print(f"[processor] doc_id={doc_id} | 섹션 파싱 완료: {len(sections)}개", flush=True)
 
     # ── STEP 3. 섹션별 GPT 요약 + 임베딩 생성 ───────────────────────────────
-    # - generate_search_summary: GPT-4o로 섹션 요약 + 키워드 추출
+    # - generate_search_summary: GPT-5o-mini로 섹션 요약 + 키워드 추출
     # - 임베딩 대상: "섹션제목 + 요약 + 키워드" 합성 텍스트
     #   (원문 대신 요약 텍스트를 임베딩하여 검색 정확도 향상)
     # - 임베딩 모델: MODEL_NAME (PDF2db_v2.py에서 정의)
@@ -110,7 +110,7 @@ def _process_v2_sync(doc_id: int, site_id: int, pdf_bytes: bytes) -> None:
             "chunk_index":    idx,
             "section_level":  sec["level"],   # 헤더 깊이 (# = 1, ## = 2, ...)
             "embed_model":    MODEL_NAME,
-            "extractor":      "pymupdf4llm",
+            "extractor":      "pymupdf4llm+fitz",
             "pipeline_version": "v2",
         })
 

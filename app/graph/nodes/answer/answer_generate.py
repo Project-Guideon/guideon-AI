@@ -47,9 +47,14 @@ def make_answer_generate_node(llm: OpenAILLM):
             }
             return {"answer_text": answer, "trace": trace}
 
-        # 컨텍스트 조립
+        # ── 컨텍스트 조립 ──────────────────────────────────────────────
+        def _format_doc(i: int, c: dict) -> str:
+            title = c.get("section_title", "")
+            header = f"[문서 {i + 1}] {title}".strip() if title else f"[문서 {i + 1}]"
+            return f"{header}\n{c['content']}"
+
         context_str = "\n\n".join(
-            f"[문서 {i + 1}]\n{c['content']}" for i, c in enumerate(chunks)
+            _format_doc(i, c) for i, c in enumerate(chunks)
         )
 
         # 마스코트 페르소나 블록 조립 (ko/foreign 분기는 build_persona_block 내부에서 처리)
