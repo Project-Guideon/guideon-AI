@@ -49,7 +49,7 @@ CORE_BASE_URL = os.getenv("CORE_BASE_URL", "http://localhost:8080")
 # 청킹 파라미터 (Spring API에서 받지 않고 여기서 고정)
 MAX_CHUNK_SIZE = 600   # 섹션 최대 글자 수 (초과 시 추가 분할)
 MIN_CHUNK_SIZE = 80    # 섹션 최소 글자 수 (미달 시 앞 섹션과 병합)
-CHUNK_OVERLAP  = 2   # 섹션 간 겹치는 글자 수 -> 문장 수로 변경(문맥 연속성 확보)
+CHUNK_OVERLAP  = 2   # 섹션 간 overlap 문장 수 (문맥 연속성 확보)
 
 
 def _process_v2_sync(doc_id: int, site_id: int, pdf_bytes: bytes) -> None:
@@ -110,7 +110,7 @@ def _process_v2_sync(doc_id: int, site_id: int, pdf_bytes: bytes) -> None:
             "chunk_index":    idx,
             "section_level":  sec["level"],   # 헤더 깊이 (# = 1, ## = 2, ...)
             "embed_model":    MODEL_NAME,
-            "extractor":      "pymupdf4llm",
+            "extractor":      "pymupdf4llm+fitz",
             "pipeline_version": "v2",
         })
 
