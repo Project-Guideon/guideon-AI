@@ -343,7 +343,8 @@ async def ws_stream(websocket: WebSocket):
                 "trace_id": trace_id,
             }, ensure_ascii=False))
 
-            query = (" ".join(final_parts) or last_interim).strip()
+            sep = "" if last_lang_code.startswith(("ja", "zh")) else " "
+            query = (sep.join(final_parts) or last_interim).strip()
             if not query:
                 await websocket.send_text(json.dumps({
                     "type": "error",
