@@ -41,3 +41,8 @@ def traced_voice_run(audio_bytes: bytes, site_id: int, mascot: dict | None = Non
 @traceable(name="text_qa_pipeline")
 def traced_text_run(query: str, site_id: int, language_code: str, mascot: dict | None = None):
     return text_pipeline.run(query=query, site_id=site_id, language_code=language_code, mascot=mascot)
+
+
+@traceable(name="internal_qa_pipeline")
+def traced_internal_run(initial_state: dict) -> dict:
+    return text_pipeline.graph.invoke(initial_state)
