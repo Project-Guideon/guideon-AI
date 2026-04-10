@@ -73,6 +73,8 @@ def make_intent_gate_node(llm: OpenAILLM):
         try:
             raw = llm.chat(messages, max_tokens=150)
             parsed = json.loads(raw)
+            if not isinstance(parsed, dict):
+                raise ValueError(f"LLM response is not a JSON object: {type(parsed).__name__}")
 
             # STT 보정 텍스트 추출
             ct = parsed.get("corrected_text")
@@ -106,7 +108,7 @@ def make_intent_gate_node(llm: OpenAILLM):
                 ranking = valid + missing
                 if len(valid) < len(_ALLOWED_INTENTS):
                     method = "llm_partial_fix"
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, ValueError) as e:
             ranking = _DEFAULT_RANKING
             place_category = None
             method = "llm_fallback_invalid_json"
