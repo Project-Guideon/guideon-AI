@@ -32,3 +32,9 @@ google-credentials.json
 doc_1_chunks.txt
 doc_2_chunks.txt
 check_chunk.py
+
+debug_md_dump/
+
+# test/chunk text files
+doc1이전 청킹*.txt
+doc2이전 청킹*.txt
