@@ -29,10 +29,15 @@ def make_intent_gate_node(llm: OpenAILLM):
             {
                 "role": "system",
                 "content": (
-                    "You are an intent classifier for a multilingual tourism voice chatbot.\n"
-                    "Classify the user input by WHAT THE USER WANTS, not by the topic or keywords.\n"
-                    "Rank ALL 4 categories by likelihood:\n"
+                    "You are an assistant for a multilingual tourism voice chatbot.\n"
+                    "Do TWO things with the user input:\n"
                     "\n"
+                    "1. CORRECT STT (speech-to-text) errors:\n"
+                    "   - Fix misheard words, phonetically similar substitutions, garbled text\n"
+                    "   - Preserve the original language (Korean→Korean, English→English, etc.)\n"
+                    "   - If no correction needed, return the original text unchanged\n"
+                    "\n"
+                    "2. CLASSIFY intent — rank ALL 4 categories by likelihood:\n"
                     "  rag       : The user wants to UNDERSTAND or LEARN something — history, origin,\n"
                     "              meaning, background stories, cultural significance, how/why something\n"
                     "              was built, what something used to be, architectural details, legends.\n"
@@ -45,14 +50,13 @@ def make_intent_gate_node(llm: OpenAILLM):
                     "              special openings, scheduled activities.\n"
                     "  struct_db : The user wants to FIND A SPECIFIC PLACE or LOCATION — where is\n"
                     "              a restroom, parking lot, specific building, gate, ticket booth, shop,\n"
-                    "              restaurant, or any named place within the site. The user needs\n"
-                    "              directions or location of a place stored in the database.\n"
+                    "              restaurant, or any named place within the site.\n"
                     "\n"
                     "Key distinction: 'Where is the restroom?' → struct_db (finding a place)\n"
                     "                 'What was the restroom area used for historically?' → rag (learning)\n"
                     "\n"
                     "Respond ONLY with valid JSON. Example:\n"
-                    '{"ranking": ["struct_db", "rag", "event", "smalltalk"], "place_category": "TOILET"}\n'
+                    '{"corrected_text": "화장실 어디야", "ranking": ["struct_db", "rag", "event", "smalltalk"], "place_category": "TOILET"}\n'
                     "\n"
                     "The first item is the most likely intent. Include all 4 categories.\n"
                     "place_category: set ONLY when top intent is struct_db, otherwise null.\n"
@@ -60,14 +64,21 @@ def make_intent_gate_node(llm: OpenAILLM):
                     "DO NOT generate any answer or explanation."
                 ),
             },
-            {"role": "user", "content": f"Classify this input: {text}"},
+            {"role": "user", "content": f"Input: {text}"},
         ]
 
         method = "llm"
         error = ""
+        corrected_text = text  # 기본값: 보정 없음
         try:
-            raw = llm.chat(messages, max_tokens=60)
+            raw = llm.chat(messages, max_tokens=150)
             parsed = json.loads(raw)
+
+            # STT 보정 텍스트 추출
+            ct = parsed.get("corrected_text")
+            if isinstance(ct, str) and ct.strip():
+                corrected_text = ct.strip()
+
             ranking = parsed.get("ranking", _DEFAULT_RANKING)
             # 1순위가 struct_db일 때만 place_category 적용, 허용 enum 외 값은 None
             raw_category = parsed.get("place_category")
@@ -121,7 +132,9 @@ def make_intent_gate_node(llm: OpenAILLM):
         flow.append("intent_gate")
         trace["_flow"] = flow
         trace["intent_gate"] = {
-            "text": text,
+            "original_text": text,
+            "corrected_text": corrected_text,
+            "stt_corrected": corrected_text != text,
             "ranking": ranking,
             "place_category": place_category,
             "method": method,
@@ -140,6 +153,7 @@ def make_intent_gate_node(llm: OpenAILLM):
             "intent_ranking": ranking,
             "current_intent_index": 0,
             "place_category": place_category,
+            "normalized_text": corrected_text,  # STT 보정 텍스트로 덮어씀
             "trace": trace,
         }
 

@@ -42,7 +42,6 @@ from app.graph.routers.intent_router import intent_router
 from app.graph.routers.answer_check_router import answer_check_router
 from app.graph.routers.fallback_router import fallback_dispatch_node, fallback_router
 
-
 # ── 공통 노드/엣지 등록 (text_graph, full_graph 공유) ─────────────────────────
 
 def _register_core_nodes(builder: StateGraph, rag: PgVectorRAG, llm: OpenAILLM):

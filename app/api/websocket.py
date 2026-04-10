@@ -290,8 +290,8 @@ async def ws_stream(websocket: WebSocket):
                 "trace_id": trace_id,
             }, ensure_ascii=False))
 
+            final_parts: list[str] = []
             last_interim = ""
-            last_final = ""
             last_lang_code = stt_language
 
             with ls_trace(
@@ -314,7 +314,7 @@ async def ws_stream(websocket: WebSocket):
                     last_lang_code = ev.language_code or last_lang_code
 
                     if ev.is_final:
-                        last_final = ev.transcript
+                        final_parts.append(ev.transcript)
                     else:
                         last_interim = ev.transcript
 
@@ -343,7 +343,7 @@ async def ws_stream(websocket: WebSocket):
                 "trace_id": trace_id,
             }, ensure_ascii=False))
 
-            query = (last_final or last_interim).strip()
+            query = (" ".join(final_parts) or last_interim).strip()
             if not query:
                 await websocket.send_text(json.dumps({
                     "type": "error",

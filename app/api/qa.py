@@ -15,7 +15,7 @@ from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field, ConfigDict
 
-from app.core.dependencies import traced_voice_run, traced_text_run, text_pipeline
+from app.core.dependencies import traced_voice_run, traced_text_run, traced_internal_run
 from app.core.services.chat_history import load_chat_history
 
 router = APIRouter()
@@ -116,7 +116,7 @@ async def internal_qa(req: InternalQaRequest):
         "category": "",
     }
 
-    result = await asyncio.to_thread(text_pipeline.graph.invoke, initial_state)
+    result = await asyncio.to_thread(traced_internal_run, initial_state)
 
     answer = result.get("answer_text", "")
     answer_found = result.get("check_result") == "good"
