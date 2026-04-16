@@ -291,7 +291,10 @@ async def ws_stream(websocket: WebSocket):
             }, ensure_ascii=False))
 
             final_parts: list[str] = []
-            last_interim = ""
+            # 발화별 현재 interim (final이 오면 리셋)
+            current_utterance_interim = ""
+            # final 없이 묻힌 interim 보존 (앞 문장 유실 방지)
+            unfinalised_interims: list[str] = []
             last_lang_code = stt_language
 
             with ls_trace(
@@ -314,9 +317,16 @@ async def ws_stream(websocket: WebSocket):
                     last_lang_code = ev.language_code or last_lang_code
 
                     if ev.is_final:
+                        # 현재 utterance interim이 final 텍스트에 포함 안 된 내용이면 보존
+                        if (
+                            current_utterance_interim
+                            and current_utterance_interim.strip() not in ev.transcript
+                        ):
+                            unfinalised_interims.append(current_utterance_interim.strip())
+                        current_utterance_interim = ""
                         final_parts.append(ev.transcript)
                     else:
-                        last_interim = ev.transcript
+                        current_utterance_interim = ev.transcript
 
                     await websocket.send_text(json.dumps({
                         "type": "stt_final" if ev.is_final else "stt_interim",
@@ -344,7 +354,20 @@ async def ws_stream(websocket: WebSocket):
             }, ensure_ascii=False))
 
             sep = "" if last_lang_code.startswith(("ja", "zh")) else " "
-            query = (sep.join(final_parts) or last_interim).strip()
+            finals_text = sep.join(final_parts).strip()
+
+            # 스트림 종료 후 아직 final 안 된 interim이 있으면 합산
+            if current_utterance_interim.strip() and current_utterance_interim.strip() not in finals_text:
+                unfinalised_interims.append(current_utterance_interim.strip())
+
+            # final에 없는 앞 문장 interim을 앞에 붙임
+            prefix = sep.join(
+                p for p in unfinalised_interims if p and p not in finals_text
+            ).strip()
+            if prefix:
+                query = (prefix + sep + finals_text).strip() if finals_text else prefix
+            else:
+                query = finals_text or current_utterance_interim.strip()
             if not query:
                 await websocket.send_text(json.dumps({
                     "type": "error",

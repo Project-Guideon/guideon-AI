@@ -7,7 +7,7 @@ import base64
 import time
 
 WS_URL = "ws://127.0.0.1:8000/ws/stream"
-WAV_PATH = "audio/wav/6_sh.wav"
+WAV_PATH = "audio/wav/2문장.wav"
 
 CHUNK_MS = 50
 SAVE_TTS_AUDIO = True
