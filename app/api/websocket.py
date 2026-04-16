@@ -7,10 +7,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import re
 import time
 import uuid
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from langsmith import trace as ls_trace, traceable
@@ -160,6 +163,7 @@ async def send_tts_chunks(
     tts_language_code: str,
     trace_id: str,
     start_seq: int = 0,
+    mark_final: bool = True,
 ) -> dict:
     non_empty_sentences = [s.strip() for s in sentences if s and s.strip()]
 
@@ -189,7 +193,7 @@ async def send_tts_chunks(
             "audio_format": "mp3",
             "audio_b64": base64.b64encode(audio_chunk).decode("utf-8"),
             "language_code": tts_language_code,
-            "is_final": idx == len(non_empty_sentences) - 1,
+            "is_final": mark_final and idx == len(non_empty_sentences) - 1,
             "trace_id": trace_id,
         }, ensure_ascii=False))
 
@@ -248,7 +252,7 @@ async def ws_stream(websocket: WebSocket):
         sample_rate_hz = int(start.get("sample_rate_hz", 16000))
         interim_results = bool(start.get("interim_results", True))
         tts_stream = bool(start.get("tts_stream", True))
-        realtime = bool(start.get("realtime", True))
+        realtime = bool(start.get("realtime", False))
         mascot = normalize_mascot_payload(start.get("mascot"))
 
         with ls_trace(
@@ -291,7 +295,10 @@ async def ws_stream(websocket: WebSocket):
             }, ensure_ascii=False))
 
             final_parts: list[str] = []
-            last_interim = ""
+            # 발화별 현재 interim (final이 오면 리셋)
+            current_utterance_interim = ""
+            # final 없이 묻힌 interim 보존 (앞 문장 유실 방지)
+            unfinalised_interims: list[str] = []
             last_lang_code = stt_language
 
             with ls_trace(
@@ -314,9 +321,16 @@ async def ws_stream(websocket: WebSocket):
                     last_lang_code = ev.language_code or last_lang_code
 
                     if ev.is_final:
+                        # 현재 utterance interim이 final 텍스트에 포함 안 된 내용이면 보존
+                        if (
+                            current_utterance_interim
+                            and current_utterance_interim.strip() not in ev.transcript
+                        ):
+                            unfinalised_interims.append(current_utterance_interim.strip())
+                        current_utterance_interim = ""
                         final_parts.append(ev.transcript)
                     else:
-                        last_interim = ev.transcript
+                        current_utterance_interim = ev.transcript
 
                     await websocket.send_text(json.dumps({
                         "type": "stt_final" if ev.is_final else "stt_interim",
@@ -344,7 +358,20 @@ async def ws_stream(websocket: WebSocket):
             }, ensure_ascii=False))
 
             sep = "" if last_lang_code.startswith(("ja", "zh")) else " "
-            query = (sep.join(final_parts) or last_interim).strip()
+            finals_text = sep.join(final_parts).strip()
+
+            # 스트림 종료 후 아직 final 안 된 interim이 있으면 합산
+            if current_utterance_interim.strip() and current_utterance_interim.strip() not in finals_text:
+                unfinalised_interims.append(current_utterance_interim.strip())
+
+            # final에 없는 앞 문장 interim을 앞에 붙임
+            prefix = sep.join(
+                p for p in unfinalised_interims if p and p not in finals_text
+            ).strip()
+            if prefix:
+                query = (prefix + sep + finals_text).strip() if finals_text else prefix
+            else:
+                query = finals_text or current_utterance_interim.strip()
             if not query:
                 await websocket.send_text(json.dumps({
                     "type": "error",
@@ -420,6 +447,7 @@ async def ws_stream(websocket: WebSocket):
                             tts_language_code=tts_language_code,
                             trace_id=trace_id,
                             start_seq=idx,
+                            mark_final=False,
                         )
 
                         tts_total_ms = (tts_total_ms or 0) + tts_result["total_tts_ms"]
@@ -537,12 +565,13 @@ async def ws_stream(websocket: WebSocket):
     except WebSocketDisconnect:
         return
 
-    except Exception as e:
+    except Exception:
+        logger.exception("ws_stream unhandled error trace_id=%s", trace_id)
         try:
             await websocket.send_text(json.dumps({
                 "type": "error",
                 "code": "INTERNAL",
-                "message": str(e),
+                "message": "내부 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
                 "trace_id": trace_id,
             }, ensure_ascii=False))
         finally:
