@@ -7,10 +7,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import re
 import time
 import uuid
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from langsmith import trace as ls_trace, traceable
@@ -160,6 +163,7 @@ async def send_tts_chunks(
     tts_language_code: str,
     trace_id: str,
     start_seq: int = 0,
+    mark_final: bool = True,
 ) -> dict:
     non_empty_sentences = [s.strip() for s in sentences if s and s.strip()]
 
@@ -189,7 +193,7 @@ async def send_tts_chunks(
             "audio_format": "mp3",
             "audio_b64": base64.b64encode(audio_chunk).decode("utf-8"),
             "language_code": tts_language_code,
-            "is_final": idx == len(non_empty_sentences) - 1,
+            "is_final": mark_final and idx == len(non_empty_sentences) - 1,
             "trace_id": trace_id,
         }, ensure_ascii=False))
 
@@ -248,7 +252,7 @@ async def ws_stream(websocket: WebSocket):
         sample_rate_hz = int(start.get("sample_rate_hz", 16000))
         interim_results = bool(start.get("interim_results", True))
         tts_stream = bool(start.get("tts_stream", True))
-        realtime = bool(start.get("realtime", True))
+        realtime = bool(start.get("realtime", False))
         mascot = normalize_mascot_payload(start.get("mascot"))
 
         with ls_trace(
@@ -443,6 +447,7 @@ async def ws_stream(websocket: WebSocket):
                             tts_language_code=tts_language_code,
                             trace_id=trace_id,
                             start_seq=idx,
+                            mark_final=False,
                         )
 
                         tts_total_ms = (tts_total_ms or 0) + tts_result["total_tts_ms"]
@@ -560,12 +565,13 @@ async def ws_stream(websocket: WebSocket):
     except WebSocketDisconnect:
         return
 
-    except Exception as e:
+    except Exception:
+        logger.exception("ws_stream unhandled error trace_id=%s", trace_id)
         try:
             await websocket.send_text(json.dumps({
                 "type": "error",
                 "code": "INTERNAL",
-                "message": str(e),
+                "message": "내부 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
                 "trace_id": trace_id,
             }, ensure_ascii=False))
         finally:
