@@ -2,31 +2,19 @@
 구조화 RAG v2 — PDF 처리 파이프라인
 
 흐름:
-  PDF bytes → pymupdf4llm(마크다운 변환)
-           → fitz 보조 분석(인라인 소제목 감지)
+  PDF bytes → LlamaParse(마크다운 변환, Agentic 모드)
            → # 헤더 기반 섹션 파싱
            → GPT 검색용 요약 생성 → 요약 임베딩 → DB 저장
 
 기존 PDF2db.py(v1)와 독립적으로 동작하며, tb_doc_chunk_v2 테이블에 저장.
-
-개선점:
-1. 하이브리드 방식: pymupdf4llm(텍스트 추출/정렬) + fitz(인라인 소제목 감지 + fallback)
-2. 같은 크기에서 소수 폰트 감지 → 인라인 소제목을 ### 헤더로 분리
-3. 한자 주석(인라인)과 진짜 소제목(줄 시작)을 x좌표로 구분
-4. overlap이 글자 단위에서 문장 단위로 개선
-5. 임베딩 시 section_title + summary + keywords 조합
-6. 페이지별 pymupdf4llm↔fitz 비교 → 텍스트 누락 시 fitz fallback
 """
 from __future__ import annotations
 
 import json
 import re
 import tempfile
-from collections import Counter, defaultdict
-from typing import List, Dict, Any, Set, Tuple
+from typing import List, Dict, Any
 
-import fitz  # PyMuPDF
-import pymupdf4llm
 from psycopg.types.json import Jsonb
 
 from app.core.DB.connect_db import get_conn
@@ -39,401 +27,45 @@ SUMMARY_MODEL_NAME = "gpt-5-mini"
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-# ── 1) PDF → 마크다운 변환 (하이브리드: pymupdf4llm + fitz 보조) ────────────
-
-def _detect_inline_headings(pdf_bytes: bytes) -> Tuple[Set[str], Set[str]]:
-    """fitz로 PDF를 분석하여 (인라인 소제목, 소수폰트 소제목) 텍스트 목록을 반환.
-
-    pymupdf4llm이 감지 못하는 인라인 소제목을 찾아냄.
-    예: "경복궁의 명칭   경복궁은 조선 왕조가..." 에서 "경복궁의 명칭" 부분.
-
-    Returns:
-        (inline_heading_texts, heading_font_texts)
-        - inline_heading_texts: 본문 줄에 끼어있는 소제목 (### 헤더로 분리할 대상)
-        - heading_font_texts: 소수 폰트의 모든 소제목 텍스트 (##### 헤더 라인 분리용)
-
-    판별 기준:
-    1. 같은 크기 그룹에서 소수 폰트(minority font) 감지
-       - 글자 수가 다수 폰트의 20% 미만
-       - 평균 span 길이 4~40자, span 50개 이하
-    2. 인라인(한자 주석) vs 소제목 구분
-       - 줄의 시작 위치에 있으면 → 소제목
-       - 줄 중간에 끼어있으면 → 인라인 주석 (무시)
-    """
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(pdf_bytes)
-        tmp_path = tmp.name
-
-    try:
-        with fitz.open(tmp_path) as doc:
-            all_spans = []
-
-            for page_idx in range(len(doc)):
-                page = doc[page_idx]
-                for block in page.get_text("dict")["blocks"]:
-                    if block["type"] != 0:
-                        continue
-                    for line in block["lines"]:
-                        for span in line["spans"]:
-                            text = span["text"].strip()
-                            if not text:
-                                continue
-                            all_spans.append({
-                                "text": text,
-                                "size": round(span["size"], 1),
-                                "font": span.get("font", ""),
-                                "bbox": span["bbox"],
-                                "page": page_idx,
-                            })
-    finally:
-        os.unlink(tmp_path)
-
-    if not all_spans:
-        return set(), set()
-
-    # ── 본문 크기 판별 (서술형 점수 기반) ──
-    size_groups: dict = defaultdict(lambda: {
-        "total_chars": 0, "span_count": 0, "period_count": 0,
-    })
-    for s in all_spans:
-        g = size_groups[s["size"]]
-        g["total_chars"] += len(s["text"])
-        g["span_count"] += 1
-        g["period_count"] += len(re.findall(r"[.!?。]", s["text"]))
-
-    best_size, best_score = 12.0, -1.0
-    for size, g in size_groups.items():
-        if g["total_chars"] < 50:
-            continue
-        avg_len = g["total_chars"] / max(g["span_count"], 1)
-        period_d = g["period_count"] / max(g["total_chars"], 1) * 1000
-        score = g["total_chars"] * (1 + avg_len / 50) * (1 + period_d)
-        if score > best_score:
-            best_score = score
-            best_size = size
-
-    # ── 소수 폰트 감지 ──
-    size_font_chars: Dict[float, Counter] = defaultdict(Counter)
-    size_font_count: Dict[Tuple[float, str], int] = defaultdict(int)
-    for s in all_spans:
-        size_font_chars[s["size"]][s["font"]] += len(s["text"])
-        size_font_count[(s["size"], s["font"])] += 1
-
-    heading_fonts_by_size: Dict[float, set] = defaultdict(set)
-    for sz, font_counter in size_font_chars.items():
-        if len(font_counter) < 2:
-            continue
-        fonts_sorted = font_counter.most_common()
-        _, majority_chars = fonts_sorted[0]
-        for font, chars in fonts_sorted[1:]:
-            sc = size_font_count[(sz, font)]
-            avg_len = chars / max(sc, 1)
-            if (chars < majority_chars * 0.2
-                    and 4 <= avg_len <= 40
-                    and sc <= 50):
-                heading_fonts_by_size[sz].add(font)
-
-    if not heading_fonts_by_size:
-        return set(), set()
-
-    # ── 소수 폰트의 모든 소제목 텍스트 수집 (##### 헤더 라인 분리용) ──
-    heading_font_texts: Set[str] = set()
-    for s in all_spans:
-        sz = s["size"]
-        if s["font"] in heading_fonts_by_size.get(sz, set()):
-            text = s["text"].strip()
-            if 4 <= len(text) <= 60:
-                heading_font_texts.add(text)
-
-    # ── 인라인 vs 소제목 구분 (x좌표 기반) ──
-    Y_TOL = 3.0
-    line_fonts: Dict[Tuple[int, float], Counter] = defaultdict(Counter)
-    line_min_x: Dict[Tuple[int, float], float] = {}
-    for s in all_spans:
-        y_bucket = round(s["bbox"][1] / Y_TOL) * Y_TOL
-        key = (s["page"], y_bucket)
-        line_fonts[key][s["font"]] += len(s["text"])
-        x0 = s["bbox"][0]
-        if key not in line_min_x or x0 < line_min_x[key]:
-            line_min_x[key] = x0
-
-    inline_heading_texts: Set[str] = set()
-    for s in all_spans:
-        sz = s["size"]
-        if s["font"] not in heading_fonts_by_size.get(sz, set()):
-            continue
-
-        y_bucket = round(s["bbox"][1] / Y_TOL) * Y_TOL
-        key = (s["page"], y_bucket)
-        fonts_on_line = line_fonts[key]
-        other_chars = sum(c for f, c in fonts_on_line.items() if f != s["font"])
-
-        # 같은 줄에 다른 폰트의 본문이 없으면 → pymupdf4llm이 이미 처리
-        if other_chars <= len(s["text"]):
-            continue
-
-        # 줄 시작 위치에 있는 소수 폰트 → 인라인 소제목
-        min_x = line_min_x.get(key, 0)
-        if abs(s["bbox"][0] - min_x) < 5.0:
-            inline_heading_texts.add(s["text"])
-
-    return inline_heading_texts, heading_font_texts
-
-
-def _inject_inline_headings(md_text: str, heading_texts: Set[str]) -> str:
-    """pymupdf4llm 마크다운에서 인라인 소제목을 ### 헤더로 분리.
-
-    "경복궁의 명칭 경복궁은 조선 왕조가..." 형태를
-    "### 경복궁의 명칭\n\n경복궁은 조선 왕조가..." 로 변환.
-    """
-    if not heading_texts:
-        return md_text
-
-    # 긴 텍스트부터 매칭 (짧은 것이 긴 것의 부분문자열일 수 있으므로)
-    sorted_headings = sorted(heading_texts, key=len, reverse=True)
-
-    for heading in sorted_headings:
-        escaped = re.escape(heading)
-        # 공백 1개 이상이면 매칭 (pymupdf4llm이 공백을 1개로 합치는 경우 대응)
-        pattern = re.compile(
-            rf"^({escaped})\s+(\S)",
-            re.MULTILINE,
-        )
-        md_text = pattern.sub(rf"### \1\n\n\2", md_text)
-
-    return md_text
-
-
-def _split_header_body_lines(md_text: str, heading_font_texts: Set[str]) -> str:
-    """##### 제목본문... 형태를 ##### 제목\\n\\n본문... 으로 분리.
-
-    pymupdf4llm이 h5 헤더의 제목과 본문을 줄바꿈 없이 한 줄에 출력하는 문제 대응.
-    fitz에서 추출한 소수 폰트 소제목 텍스트를 기준으로 정확한 분리 지점을 찾는다.
-    """
-    if not heading_font_texts:
-        return md_text
-
-    # 긴 텍스트부터 매칭 (짧은 것이 긴 것의 부분문자열일 수 있으므로)
-    sorted_headings = sorted(heading_font_texts, key=len, reverse=True)
-
-    header_re = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
-
-    def _try_split(m: re.Match) -> str:
-        hashes = m.group(1)
-        text = m.group(2)
-
-        # 짧으면 정상적인 제목 → 그대로
-        if len(text) <= 80:
-            return m.group(0)
-
-        # fitz 소제목 텍스트와 매칭하여 분리 지점 결정
-        for heading in sorted_headings:
-            if text.startswith(heading) and len(text) > len(heading) + 1:
-                body = text[len(heading):].strip()
-                if body:
-                    return f"{hashes} {heading}\n\n{body}"
-
-        return m.group(0)
-
-    return header_re.sub(_try_split, md_text)
-
-
-def _extract_fitz_page_text(doc: fitz.Document, page_idx: int) -> str:
-    """fitz로 단일 페이지의 plain text를 추출 (비교용)."""
-    page = doc[page_idx]
-    return page.get_text("text").strip()
-
-
-def _fitz_page_to_markdown(page) -> str:
-    """fitz로 단일 페이지를 마크다운(헤더 포함)으로 변환.
-
-    page.get_text("text") 대신 사용하여 폰트 크기/종류 분석으로
-    헤더 구조를 보존한 마크다운을 생성한다.
-
-    헤더 판별 기준:
-    - 본문보다 1.8배 이상 큰 폰트 → ### (주요 섹션)
-    - 본문보다 1.1배 이상 큰 폰트 → #### (부제목)
-    - 본문과 같은 크기이지만 소수 폰트 → ##### (소제목)
-    """
-    blocks = page.get_text("dict")["blocks"]
-
-    # ── 1) 전체 span 수집 (폰트 분석용) ──
-    all_spans: List[Dict] = []
-    for block in blocks:
-        if block["type"] != 0:
-            continue
-        for line in block["lines"]:
-            for span in line["spans"]:
-                text = span["text"].strip()
-                if text:
-                    all_spans.append({
-                        "text": text,
-                        "size": round(span["size"], 1),
-                        "font": span.get("font", ""),
-                    })
-
-    if not all_spans:
-        return ""
-
-    # ── 2) 본문 크기 판별 (가장 많은 글자 수의 크기) ──
-    size_chars: Counter = Counter()
-    for s in all_spans:
-        size_chars[s["size"]] += len(s["text"])
-    body_size = size_chars.most_common(1)[0][0]
-
-    # ── 3) 본문 크기에서 소수 폰트 감지 (소제목 폰트) ──
-    font_chars_at_body: Counter = Counter()
-    for s in all_spans:
-        if s["size"] == body_size:
-            font_chars_at_body[s["font"]] += len(s["text"])
-
-    heading_fonts: set = set()
-    if len(font_chars_at_body) >= 2:
-        _, majority_chars = font_chars_at_body.most_common(1)[0]
-        for font, chars in font_chars_at_body.items():
-            if chars < majority_chars * 0.3:
-                heading_fonts.add(font)
-
-    # ── 4) 라인별 처리 → 마크다운 생성 ──
-    output: List[str] = []
-    for block in blocks:
-        if block["type"] != 0:
-            continue
-        for line_data in block["lines"]:
-            texts: List[str] = []
-            dom_size = 0.0
-            dom_font = ""
-            dom_len = 0
-
-            for span in line_data["spans"]:
-                text = span["text"].strip()
-                if not text:
-                    continue
-                texts.append(text)
-                if len(text) > dom_len:
-                    dom_len = len(text)
-                    dom_size = round(span["size"], 1)
-                    dom_font = span.get("font", "")
-
-            line_text = " ".join(texts).strip()
-            if not line_text:
-                continue
-
-            # 페이지 번호 스킵 (숫자만 1~3자리)
-            if re.match(r"^\d{1,3}$", line_text):
-                continue
-
-            # 헤더 판별
-            header_level = 0
-            tlen = len(line_text)
-
-            if dom_size > body_size * 1.8 and tlen <= 40:
-                header_level = 3   # ### 주요 섹션
-            elif dom_size > body_size * 1.1 and tlen <= 40 and size_chars[dom_size] < 80:
-                header_level = 4   # #### 부제목 (한자 제목 등)
-            elif dom_font in heading_fonts and tlen <= 60:
-                header_level = 5   # ##### 소제목
-
-            if header_level:
-                output.append(f"{'#' * header_level} {line_text}")
-            else:
-                output.append(line_text)
-
-    # ── 5) 후처리: 블록 순서 문제로 뒤에 온 섹션 헤더(###, ####)를 앞으로 이동 ──
-    # PDF 레이아웃에서 페이지 제목이 별도 블록에 있어 fitz가 본문 뒤에 반환하는 경우 대응
-    if len(output) > 2:
-        trailing_headers: List[str] = []
-        while output and re.match(r"^#{3,4}\s+", output[-1]):
-            trailing_headers.insert(0, output.pop())
-        if trailing_headers:
-            output = trailing_headers + output
-
-    return "\n\n".join(output)
-
-
-def _is_page_content_sufficient(page_md: str, fitz_text: str, min_ratio: float = 0.3) -> bool:
-    """pymupdf4llm 결과가 fitz 대비 충분한 텍스트를 포함하는지 판정.
-
-    - fitz 텍스트가 50자 미만이면 해당 페이지는 지도/이미지 페이지로 간주 → 충분
-    - pymupdf4llm 결과가 fitz 텍스트 길이의 min_ratio 미만이면 → 불충분
-    """
-    # 마크다운에서 헤더 기호(#)와 빈 줄 제거 후 순수 텍스트 길이 측정
-    clean_md = re.sub(r"^#{1,6}\s+.*$", "", page_md, flags=re.MULTILINE).strip()
-    fitz_len = len(fitz_text)
-
-    if fitz_len < 50:
-        # fitz도 텍스트가 거의 없으면 이미지/지도 페이지 → 스킵
-        return True
-
-    return len(clean_md) >= fitz_len * min_ratio
-
+# ── 1) PDF → 마크다운 변환 (LlamaParse Agentic 모드) ────────────────────────
 
 def pdf_to_markdown(pdf_bytes: bytes) -> str:
-    """PDF bytes를 하이브리드 방식으로 마크다운 텍스트로 변환.
+    """LlamaParse Agentic 모드로 PDF bytes를 마크다운 텍스트로 변환.
 
-    1단계: pymupdf4llm으로 페이지별 마크다운 생성
-    2단계: fitz로 페이지별 텍스트 추출 + 인라인 소제목 감지
-    3단계: 페이지별로 pymupdf4llm 결과가 부족하면 fitz 텍스트로 대체
-    4단계: 감지된 인라인 소제목을 ### 헤더로 분리
+    복잡한 레이아웃(멀티컬럼, 표, 이미지 오버레이)을 AI 기반으로 처리.
+    환경변수 LLAMA_CLOUD_API_KEY 필요.
     """
-    # Step 1: pymupdf4llm 페이지별 마크다운
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(pdf_bytes)
-        tmp_path = tmp.name
-    try:
-        page_chunks = pymupdf4llm.to_markdown(tmp_path, page_chunks=True)
-    finally:
-        os.unlink(tmp_path)
+    from llama_cloud_services.parse.base import LlamaParse
 
-    # Step 2: fitz로 페이지별 텍스트 추출 (plain: 비교용, markdown: fallback용)
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(pdf_bytes)
-        tmp_path = tmp.name
-    try:
-        with fitz.open(tmp_path) as doc:
-            fitz_plain = [_extract_fitz_page_text(doc, i) for i in range(len(doc))]
-            fitz_md = [_fitz_page_to_markdown(doc[i]) for i in range(len(doc))]
-    finally:
-        os.unlink(tmp_path)
+    api_key = os.getenv("LLAMA_CLOUD_API_KEY")
+    if not api_key:
+        raise RuntimeError("LLAMA_CLOUD_API_KEY 환경변수가 설정되지 않았습니다.")
 
-    # Step 3: 페이지별 비교 → 부족하면 fitz fallback (헤더 구조 보존)
-    final_pages: List[str] = []
-    for i, chunk in enumerate(page_chunks):
-        page_md = chunk.get("text", "") if isinstance(chunk, dict) else str(chunk)
-        fitz_text = fitz_plain[i] if i < len(fitz_plain) else ""
-
-        if _is_page_content_sufficient(page_md, fitz_text):
-            final_pages.append(page_md)
-        else:
-            fallback = fitz_md[i] if i < len(fitz_md) else fitz_text
-            print(f"[pdf_to_md] PAGE {i+1}: pymupdf4llm 부족 → fitz fallback "
-                  f"(md={len(page_md)}자, fitz={len(fitz_text)}자)", flush=True)
-            final_pages.append(fallback)
-
-    md_text = "\n\n".join(final_pages)
-
-    # Step 4: fitz 보조 분석 — 인라인 소제목 감지 + 주입
-    inline_headings, heading_font_texts = _detect_inline_headings(pdf_bytes)
-    if inline_headings:
-        print(f"[pdf_to_md] 인라인 소제목 {len(inline_headings)}개 감지: "
-              f"{list(inline_headings)[:5]}", flush=True)
-
-    md_text = _inject_inline_headings(md_text, inline_headings)
-
-    # Step 5: ##### 제목+본문 한 줄 합쳐진 헤더 라인 분리
-    if heading_font_texts:
-        print(f"[pdf_to_md] 소제목 폰트 텍스트 {len(heading_font_texts)}개 감지: "
-              f"{list(heading_font_texts)[:5]}", flush=True)
-    md_text = _split_header_body_lines(md_text, heading_font_texts)
-
-    # Step 6: 번호형 소제목(1~2자리 숫자 + 괄호)을 ### 헤더로 변환
-    md_text = re.sub(
-        r'^(\d{1,2}\))\s+(.{2,30})\s*$',
-        r'### \1 \2',
-        md_text,
-        flags=re.MULTILINE,
+    parser = LlamaParse(
+        api_key=api_key,
+        result_type="markdown",
+        language="ko",
+        parse_mode="parse_page_with_agent",  # 웹 UI Agentic 10크레딧/페이지
+        system_prompt=(
+            "각 섹션을 헤더(#,##, ###,####)로 명확히 구분하여 마크다운으로 출력하세요. "
+            "표는 마크다운 표 형식을 사용하고, 본문 내용은 빠짐없이 포함하세요."
+        ),
+        split_by_page=False,
     )
 
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(pdf_bytes)
+        tmp_path = tmp.name
+    try:
+        documents = parser.load_data(tmp_path)
+    finally:
+        os.unlink(tmp_path)
+
+    if not documents:
+        raise RuntimeError("LlamaParse가 빈 결과를 반환했습니다.")
+
+    md_text = "\n\n".join(doc.text for doc in documents)
+    print(f"[pdf_to_md] LlamaParse 완료: {len(documents)}페이지, {len(md_text)}자", flush=True)
     return md_text
 
 
@@ -909,7 +541,7 @@ def process_pdf_bytes_v2(
                 "section_level": sec["level"],
                 "embed_model": MODEL_NAME,
                 "summary_model": SUMMARY_MODEL_NAME,
-                "extractor": "pymupdf4llm+fitz",
+                "extractor": "llamaparse",
                 "pipeline_version": "v2",
             }
 
