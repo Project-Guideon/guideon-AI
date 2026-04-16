@@ -5,6 +5,9 @@ from typing import List
 from app.graph.state import GraphState
 
 
+ALLOWED_INTENTS = {"rag", "smalltalk", "event", "struct_db"}
+
+
 def intent_router(state: GraphState) -> str:
     """intent_gate 결과(ranking)로 첫 번째 의도의 다음 노드를 결정.
 
@@ -21,9 +24,15 @@ def intent_router(state: GraphState) -> str:
     index: int = state.get("current_intent_index", 0)
     language_code: str = state.get("language_code", "ko")
 
-    intent = ranking[index] if index < len(ranking) else "rag"
+    if not isinstance(index, int) or index < 0 or index >= len(ranking):
+        index = 0
+
+    intent = ranking[index]
+
+    if intent not in ALLOWED_INTENTS:
+        intent = "rag"
 
     if intent == "rag":
-        return "retrieve" if language_code == "ko" else "translate_ko"
+        return "retrieve" if language_code.lower().startswith("ko") else "translate_ko"
 
     return intent  # "smalltalk" | "event" | "struct_db"
