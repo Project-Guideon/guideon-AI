@@ -25,6 +25,11 @@ class STTConfig:
     encoding: speech_types.RecognitionConfig.AudioEncoding = (
         speech_types.RecognitionConfig.AudioEncoding.LINEAR16
     )
+    # 사이트별 고유명사 힌트 (건물명, 유물명 등) — 모든 요청에 공통 적용
+    default_speech_phrases: List[str] = field(default_factory=lambda: [
+        "근정전", "사정전", "경복궁", "창덕궁", "창경궁", "덕수궁", "경회루",
+        "향원정", "교태전", "강녕전", "집옥재", "자경전", "흥례문", "광화문",
+    ])
 
 
 @dataclass
@@ -89,6 +94,7 @@ class GoogleSTT:
         enable_punctuation: Optional[bool] = None,
         interim_results: bool = True,
         single_utterance: bool = False,
+        speech_phrases: Optional[List[str]] = None,
     ) -> AsyncIterator[STTStreamEvent]:
         """
         audio_q로부터 bytes 청크를 받아 Google Streaming STT에 흘려보내고,
@@ -102,13 +108,24 @@ class GoogleSTT:
             self.config.enable_punctuation if enable_punctuation is None else enable_punctuation
         )
 
+        all_phrases = list(self.config.default_speech_phrases)
+        if speech_phrases:
+            all_phrases.extend(speech_phrases)
+
+        contexts = (
+            [speech_types.SpeechContext(phrases=all_phrases, boost=20.0)]
+            if all_phrases
+            else []
+        )
+
         recog_cfg = speech_types.RecognitionConfig(
             encoding=self.config.encoding,
             sample_rate_hertz=sample_rate_hz,
             language_code=primary_language,
             alternative_language_codes=self.config.alternative_languages,
             enable_automatic_punctuation=enable_punctuation,
-            model="latest_short",  # 스트리밍에는 latest_short (문장 경계 final 정확)
+            model="latest_long",  # latest_long: 혼합 언어·고유명사 인식에 더 강함
+            speech_contexts=contexts,
         )
         streaming_cfg = speech_types.StreamingRecognitionConfig(
             config=recog_cfg,

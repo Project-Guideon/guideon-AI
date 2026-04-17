@@ -33,6 +33,7 @@ def intent_router(state: GraphState) -> str:
         intent = "rag"
 
     if intent == "rag":
-        return "retrieve" if language_code.lower().startswith("ko") else "translate_ko"
+        # translate_ko 단계 제거: intent_gate에서 retrieval_query_ko를 이미 생성함
+        return "retrieve"
 
     return intent  # "smalltalk" | "event" | "struct_db"
