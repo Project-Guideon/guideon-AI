@@ -5,7 +5,7 @@ from langgraph.graph import StateGraph, END
 from app.core.services.llm_openai import OpenAILLM
 from app.core.services.rag_pgvector import PgVectorRAG
 from app.core.services.rag_pgvector_v2 import PgVectorRAG_V2
-# from app.core.services.stt_google import GoogleSTT
+# from app.core.services.stt_google import GoogleSTT # → stt_google_v2로 교체
 from app.core.services.stt_google_v2 import GoogleSTTV2 as GoogleSTT
 from app.core.services.tts_google import GoogleTTS
 
