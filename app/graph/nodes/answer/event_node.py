@@ -106,6 +106,7 @@ def make_event_node(llm: OpenAILLM):
             return {
                 "answer_text": "",
                 "check_result": "bad",
+                "category": "OPERATION",
                 "trace": trace,
             }
 
@@ -187,6 +188,7 @@ def make_event_node(llm: OpenAILLM):
         return {
             "answer_text": answer_text,
             "check_result": check_result,
+            "category": "OPERATION",
             "trace": trace,
         }
 
