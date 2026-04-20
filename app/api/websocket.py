@@ -136,7 +136,12 @@ async def audio_receiver(
             msg = await websocket.receive()
 
             if msg.get("text") is not None:
-                data = json.loads(msg["text"])
+                try:
+                    data = json.loads(msg["text"])
+                except (json.JSONDecodeError, ValueError):
+                    logger.warning("audio_receiver: invalid JSON control frame — ignoring")
+                    continue
+
                 msg_type = data.get("type")
 
                 if msg_type == "stop":
@@ -274,7 +279,7 @@ async def ws_stream(websocket: WebSocket):
                 "mascot": mascot,
             },
         ):
-            audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue()
+            audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue(maxsize=200)
             timing = {
                 "ws_start_at": time.perf_counter(),
                 "first_audio_at": None,

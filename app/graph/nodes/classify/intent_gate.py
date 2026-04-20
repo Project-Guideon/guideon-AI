@@ -30,7 +30,7 @@ def make_intent_gate_node(llm: OpenAILLM):
                 "role": "system",
                 "content": (
                     "You are an assistant for a multilingual tourism voice chatbot.\n"
-                    "Do TWO things with the user input:\n"
+                    "Do THREE things with the user input:\n"
                     "\n"
                     "1. CORRECT STT (speech-to-text) errors:\n"
                     "   - Fix misheard words, phonetically similar substitutions, garbled text\n"
@@ -55,12 +55,19 @@ def make_intent_gate_node(llm: OpenAILLM):
                     "Key distinction: 'Where is the restroom?' → struct_db (finding a place)\n"
                     "                 'What was the restroom area used for historically?' → rag (learning)\n"
                     "\n"
-                    "Respond ONLY with valid JSON. Example:\n"
-                    '{"corrected_text": "화장실 어디야", "ranking": ["struct_db", "rag", "event", "smalltalk"], "place_category": "TOILET"}\n'
+                    "3. TRANSLATE to Korean search keywords (retrieval_query_ko):\n"
+                    "   - Always output SHORT Korean keywords for database retrieval (5-15 Korean words)\n"
+                    "   - If the input is already Korean, just extract the key search terms\n"
+                    "   - If the input is a foreign language, translate the core meaning into Korean keywords\n"
+                    "   - Preserve Korean proper nouns (place names, monument names) as-is\n"
                     "\n"
-                    "The first item is the most likely intent. Include all 4 categories.\n"
+                    "Respond ONLY with valid JSON. Example:\n"
+                    '{"corrected_text": "화장실 어디야", "ranking": ["struct_db", "rag", "event", "smalltalk"], "place_category": "TOILET", "retrieval_query_ko": "화장실 위치"}\n'
+                    "\n"
+                    "The first item in ranking is the most likely intent. Include all 4 categories.\n"
                     "place_category: set ONLY when top intent is struct_db, otherwise null.\n"
                     "  Possible values: TOILET, TICKET, RESTAURANT, SHOP, INFO, ATTRACTION, PARKING, OTHER\n"
+                    "retrieval_query_ko: ALWAYS required, Korean keywords only.\n"
                     "DO NOT generate any answer or explanation."
                 ),
             },
@@ -69,7 +76,8 @@ def make_intent_gate_node(llm: OpenAILLM):
 
         method = "llm"
         error = ""
-        corrected_text = text  # 기본값: 보정 없음
+        corrected_text = text      # 기본값: 보정 없음
+        retrieval_query_ko = text  # 기본값: 원문 그대로
         try:
             raw = llm.chat(messages, max_tokens=150)
             parsed = json.loads(raw)
@@ -80,6 +88,11 @@ def make_intent_gate_node(llm: OpenAILLM):
             ct = parsed.get("corrected_text")
             if isinstance(ct, str) and ct.strip():
                 corrected_text = ct.strip()
+
+            # 한국어 검색 쿼리 추출
+            rq = parsed.get("retrieval_query_ko")
+            if isinstance(rq, str) and rq.strip():
+                retrieval_query_ko = rq.strip()
 
             ranking = parsed.get("ranking", _DEFAULT_RANKING)
             # 1순위가 struct_db일 때만 place_category 적용, 허용 enum 외 값은 None
@@ -137,6 +150,7 @@ def make_intent_gate_node(llm: OpenAILLM):
             "original_text": text,
             "corrected_text": corrected_text,
             "stt_corrected": corrected_text != text,
+            "retrieval_query_ko": retrieval_query_ko,
             "ranking": ranking,
             "place_category": place_category,
             "method": method,
@@ -155,7 +169,8 @@ def make_intent_gate_node(llm: OpenAILLM):
             "intent_ranking": ranking,
             "current_intent_index": 0,
             "place_category": place_category,
-            "normalized_text": corrected_text,  # STT 보정 텍스트로 덮어씀
+            "normalized_text": corrected_text,       # STT 보정 텍스트로 덮어씀
+            "retrieval_query_ko": retrieval_query_ko, # translate_ko 노드 건너뜀
             "trace": trace,
         }
 
