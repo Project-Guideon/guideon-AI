@@ -186,7 +186,11 @@ def run_correctness_eval(df: pd.DataFrame) -> pd.DataFrame:
             else (str(x).strip().lower() == "true" if pd.notna(x) and str(x).strip() != "" else None)
         )
 
-    pending = df[df["correct_no_rag"].isna()].index.tolist()
+    pending = df[
+        df["correct_no_rag"].isna()
+        | df["correct_v1"].isna()
+        | df["correct_v2"].isna()
+    ].index.tolist()
     if not pending:
         print("정답 판별 결과 이미 존재, 재사용합니다.")
         return df
@@ -200,12 +204,14 @@ def run_correctness_eval(df: pd.DataFrame) -> pd.DataFrame:
         q, ref = row["question"], row["reference"]
         print(f"[정답판별 {i}/{total}] {q[:40]}...")
 
-        df.at[idx, "correct_no_rag"] = judge_correctness(client, q, ref, row["ans_no_rag"])
-        time.sleep(EVAL_DELAY)
-        df.at[idx, "correct_v1"] = judge_correctness(client, q, ref, row["ans_v1"])
-        time.sleep(EVAL_DELAY)
-        df.at[idx, "correct_v2"] = judge_correctness(client, q, ref, row["ans_v2"])
-        time.sleep(EVAL_DELAY)
+        for col, ans_col in (
+            ("correct_no_rag", "ans_no_rag"),
+            ("correct_v1",     "ans_v1"),
+            ("correct_v2",     "ans_v2"),
+        ):
+            if pd.isna(df.at[idx, col]) or df.at[idx, col] is None:
+                df.at[idx, col] = judge_correctness(client, q, ref, row[ans_col])
+                time.sleep(EVAL_DELAY)
 
         # 행마다 즉시 저장
         df.to_csv(raw_path, index=False, encoding="utf-8-sig")
