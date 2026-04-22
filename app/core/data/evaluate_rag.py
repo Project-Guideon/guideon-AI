@@ -60,17 +60,19 @@ RESULTS_DIR.mkdir(exist_ok=True)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def parse_testset(path: Path) -> List[Dict[str, str]]:
-    """경복궁_RAG_테스트셋.txt → 질문/정답 리스트"""
+    """경복궁_RAG_테스트셋.txt → 질문/정답 리스트 (파싱된 문항 번호 포함)"""
     text = path.read_text(encoding="utf-8")
+    # 종결자에 $ 추가 → 마지막 문항이 출처/빈줄 없이 끝나도 누락되지 않음
     pattern = re.compile(
-        r"\d+\)\s*\n질문:\s*(.+?)\n정답:\s*(.+?)(?:\n출처|\n\n)",
+        r"(\d+)\)\s*\n질문:\s*(.+?)\n정답:\s*(.+?)(?=\n출처|\n\n|\Z)",
         re.DOTALL,
     )
     items = []
     for m in pattern.finditer(text):
-        question = m.group(1).strip()
-        answer   = re.sub(r"\s+", " ", m.group(2).strip())
-        items.append({"question": question, "reference": answer})
+        q_id     = int(m.group(1))
+        question = m.group(2).strip()
+        answer   = re.sub(r"\s+", " ", m.group(3).strip())
+        items.append({"q_id": q_id, "question": question, "reference": answer})
     return items
 
 
@@ -166,7 +168,13 @@ def judge_correctness(client: OpenAI, question: str, reference: str, answer: str
         max_tokens=10,
     )
     result = (resp.choices[0].message.content or "").strip().lower()
-    return result == "correct"
+    if result.startswith("incorrect"):
+        return False
+    if result.startswith("correct"):
+        return True
+    # 예상 외 출력 — False로 처리하고 경고 출력
+    print(f"[judge_correctness 경고] 예상 외 응답: {result!r} → incorrect 처리")
+    return False
 
 
 def run_correctness_eval(df: pd.DataFrame) -> pd.DataFrame:
@@ -251,13 +259,19 @@ def run_all_systems(testset: List[Dict]) -> pd.DataFrame:
 
     total = len(testset)
 
-    for idx, item in enumerate(testset, 1):
-        if idx in rows:
-            print(f"[{idx:02d}/{total}] 이미 완료 — 스킵")
-            continue
-
+    for item in testset:
+        idx = item["q_id"]
         q   = item["question"]
         ref = item["reference"]
+
+        if idx in rows:
+            cached = rows[idx]
+            if cached.get("question") == q and cached.get("reference") == ref:
+                print(f"[{idx:02d}/{total}] 이미 완료 — 스킵")
+                continue
+            else:
+                print(f"[{idx:02d}/{total}] 테스트셋 변경 감지 → 재실행")
+
         print(f"[{idx:02d}/{total}] {q[:40]}...")
 
         # System 0: No RAG
@@ -440,8 +454,7 @@ def run_ragas(df: pd.DataFrame, system: str) -> Dict[str, float]:
         print(f"[INFO] AnswerRelevancy: 폴백 답변 {skipped_fallback}건 제외 "
               f"({len(ar_samples)}/{len(samples)}건 평가)")
 
-    dataset    = EvaluationDataset(samples=samples)
-    ar_dataset = EvaluationDataset(samples=ar_samples) if ar_samples else dataset
+    dataset = EvaluationDataset(samples=samples)
 
     # strictness=3: 역질문 3개 생성 (1=기본값, 5=안정적이나 API 부하 큼)
     ar_metric = AnswerRelevancy(llm=llm, embeddings=emb, strictness=3)
@@ -450,15 +463,20 @@ def run_ragas(df: pd.DataFrame, system: str) -> Dict[str, float]:
     scores: Dict[str, float] = {}
 
     # AnswerRelevancy 단독 평가 (폴백 제외 샘플)
-    print(f"[RAGAS] {system} — AnswerRelevancy 평가 중...")
-    ar_result = evaluate(
-        dataset=ar_dataset,
-        metrics=[ar_metric],
-        run_config=run_config,
-        raise_exceptions=False,
-    )
-    ar_scores = ar_result.to_pandas().select_dtypes(include="number").mean().to_dict()
-    scores.update(ar_scores)
+    if not ar_samples:
+        print(f"[RAGAS] {system} — AnswerRelevancy 평가 대상 없음 (전부 폴백) → N/A")
+        scores["answer_relevancy"] = float("nan")
+    else:
+        print(f"[RAGAS] {system} — AnswerRelevancy 평가 중...")
+        ar_dataset = EvaluationDataset(samples=ar_samples)
+        ar_result = evaluate(
+            dataset=ar_dataset,
+            metrics=[ar_metric],
+            run_config=run_config,
+            raise_exceptions=False,
+        )
+        ar_scores = ar_result.to_pandas().select_dtypes(include="number").mean().to_dict()
+        scores.update(ar_scores)
 
     if system != "no_rag":
         # 나머지 지표는 전체 샘플로 평가
