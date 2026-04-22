@@ -1,0 +1,30 @@
+file_name,language_code,reference_text
+ko_01.wav,ko,경복궁의 일반 어른 입장요금은 얼마인가요?
+ko_02.wav,ko,근정전이랑 사정전의 차이가 뭐예요?
+ko_03.wav,ko,경복궁은 언제 누가 창건했나요?
+ko_04.wav,ko,경복궁에 가려면 지하철 몇 호선 어디로 가야 해요?
+ko_05.wav,ko,경복궁 관람 시간은 몇 시부터 몇 시까지인가요?
+
+en_01.wav,en,What is the entrance fee for adults at Gyeongbokgung Palace?
+en_02.wav,en,What is the difference between Geunjeongjeon and Sajeongjeon?
+en_03.wav,en,When was Gyeongbokgung Palace built and by whom?
+en_04.wav,en,How can I get to Gyeongbokgung by subway?
+en_05.wav,en,What are the opening hours of Gyeongbokgung Palace?
+
+jp_01.wav,ja,景福宮の大人の入場料金はいくらですか？
+jp_02.wav,ja,勤政殿と思政殿の違いは何ですか？
+jp_03.wav,ja,景福宮はいつ誰によって建てられましたか？
+jp_04.wav,ja,景福宮へは地下鉄でどうやって行きますか？
+jp_05.wav,ja,観覧時間は何時から何時までですか？
+
+ch_01.wav,zh,景福宫的成人门票多少钱？
+ch_02.wav,zh,勤政殿和思政殿有什么区别？
+ch_03.wav,zh,景福宫是什么时候建造的？是谁建的？
+ch_04.wav,zh,去景福宫坐几号地铁，从哪个出口出来？
+ch_05.wav,zh,景福宫的开放时间是几点到几点？
+
+fusion_01.wav,ko,경복궁 entrance fee는 얼마야?
+fusion_02.wav,ko,근정전이랑 사정전 difference가 뭐야?
+fusion_03.wav,ko,경복궁 opening hours는 어떻게 돼?
+fusion_04.wav,ko,경복궁 가려면 subway 몇 호선 타야 해?
+fusion_05.wav,ko,근정전이 어떤 building인지 설명해줘
