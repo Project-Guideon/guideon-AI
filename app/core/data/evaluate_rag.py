@@ -8,15 +8,14 @@ RAG 성능 평가 스크립트 (RAGAS)
   - System 2: V2 RAG  (LlamaParser + Hybrid Search, tb_doc_chunk_v2, site_id=3)
 
 사전 설치:
-  pip install ragas pandas openpyxl langchain-openai
+  pip install ragas datasets pandas openpyxl langchain-openai
 
-실행:
-  cd C:/Users/문현우/Project_Guideon/guideon_AI
+실행 (저장소 루트에서):
   python app/core/data/evaluate_rag.py
 
-출력:
-  app/core/data/results/rag_eval_raw.csv      — 문항별 상세 결과
-  app/core/data/results/rag_eval_summary.xlsx — 시스템별 평균 요약 (논문용)
+출력 (RESULTS_DIR):
+  results7/rag_eval_raw.csv      — 문항별 상세 결과
+  results7/rag_eval_summary.xlsx — 시스템별 평균 요약 (논문용)
 """
 
 from __future__ import annotations
