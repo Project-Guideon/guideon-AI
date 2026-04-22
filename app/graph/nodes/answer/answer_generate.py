@@ -45,7 +45,7 @@ def make_answer_generate_node(llm: OpenAILLM):
                 "chunks_used": 0,
                 "answer_length": len(answer),
             }
-            return {"answer_text": answer, "trace": trace}
+            return {"answer_text": answer, "category": "INFORMATION", "trace": trace}
 
         # ── 컨텍스트 조립 ──────────────────────────────────────────────
         def _format_doc(i: int, c: dict) -> str:
@@ -124,6 +124,6 @@ def make_answer_generate_node(llm: OpenAILLM):
             "answer_length": len(answer),
         }
 
-        return {"answer_text": answer, "trace": trace}
+        return {"answer_text": answer, "category": "INFORMATION", "trace": trace}
 
     return answer_generate_node
