@@ -106,7 +106,6 @@ def make_struct_db_node(llm: OpenAILLM):
         raw = ""
 
         _allowed_emotions = {"GUIDING", "HAPPY", "THINKING", "SORRY", "EXCITED"}
-        _allowed_categories = {"DIRECTION", "HOURS", "FACILITY", "HISTORY", "GENERAL", "ERROR"}
 
         try:
             raw = llm.chat(messages, max_tokens=200)
@@ -125,8 +124,6 @@ def make_struct_db_node(llm: OpenAILLM):
                 place_id = None
             raw_emotion = parsed.get("emotion", "GUIDING")
             emotion = raw_emotion if raw_emotion in _allowed_emotions else "GUIDING"
-            raw_category = parsed.get("category", "DIRECTION")
-            category = raw_category if raw_category in _allowed_categories else "DIRECTION"
         except (json.JSONDecodeError, ValueError, TypeError) as e:
             # JSON 파싱 실패 → raw 자체를 답변으로 사용
             answer_text = raw
@@ -153,7 +150,7 @@ def make_struct_db_node(llm: OpenAILLM):
             "answer_text": answer_text,
             "place_id": place_id,
             "emotion": emotion,
-            "category": category,
+            "category": "DIRECTION",
             "check_result": "good",
             "trace": trace,
         }

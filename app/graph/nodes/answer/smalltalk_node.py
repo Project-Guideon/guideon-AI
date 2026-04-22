@@ -69,6 +69,6 @@ def make_smalltalk_node(llm: OpenAILLM):
         trace = append_trace_flow(state, "smalltalk")
         trace["smalltalk"] = {"user_language": user_language, "check_result": check_result}
 
-        return {"answer_text": answer, "check_result": check_result, "trace": trace}
+        return {"answer_text": answer, "check_result": check_result, "category": "SMALLTALK", "trace": trace}
 
     return smalltalk_node
