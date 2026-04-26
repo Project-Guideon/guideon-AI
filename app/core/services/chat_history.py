@@ -48,13 +48,6 @@ async def load_chat_history(session_id: str) -> list[dict]:
             if role in {"user", "assistant"} and isinstance(content, str):
                 history.append({"role": role, "content": content})
 
-        print(f"[ChatHistory] 조회: session_id={session_id}, key={key}, count={len(history)}")
-        for i, msg in enumerate(history):
-            role = msg.get("role", "?")
-            content = msg.get("content", "")[:50]  # 50자까지만 출력
-            print(f"  [{i}] {role}: {content}{'...' if len(msg.get('content', '')) > 50 else ''}")
-
         return history
     except Exception as e:
-        print(f"[ChatHistory] 조회 실패: session_id={session_id}, {type(e).__name__}: {e}")
         return []
