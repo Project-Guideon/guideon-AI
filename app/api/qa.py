@@ -129,9 +129,9 @@ async def internal_qa(req: InternalQaRequest):
     }
 
     return InternalQaResponse(
-        answer=answer if answer_found else fallback_answers.get(lang2, fallback_answers["en"]),
+        answer=answer or fallback_answers.get(lang2, fallback_answers["en"]),
         placeId=result.get("place_id"),
-        emotion=result.get("emotion") or ("GUIDING" if answer_found else "SORRY"),
+        emotion=result.get("emotion") or ("GUIDING" if answer else "SORRY"),
         language=lang2,
         category=result.get("category") or "GENERAL",
         answerFound=answer_found,
