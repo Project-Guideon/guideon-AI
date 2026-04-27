@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from app.core.services.stt_google import GoogleSTT
+# from app.core.services.stt_google import GoogleSTT
+from app.core.services.stt_google_v2 import GoogleSTTV2 as GoogleSTT
 from app.graph.state import GraphState
 
 

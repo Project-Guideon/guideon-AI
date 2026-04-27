@@ -7,6 +7,7 @@ from openai import APIError, APIConnectionError, APITimeoutError, RateLimitError
 
 from app.core.services.llm_openai import OpenAILLM
 from app.graph.state import GraphState
+from app.graph.nodes.utils import LANG_NAMES, build_messages, append_trace_flow, build_persona_block, get_language
 
 
 def make_struct_db_node(llm: OpenAILLM):
@@ -21,14 +22,12 @@ def make_struct_db_node(llm: OpenAILLM):
 
     def struct_db_node(state: GraphState) -> dict:
         text: str = state.get("normalized_text", "")
-        user_language: str = state.get("user_language", "ko")
+        user_language = get_language(state)
+        lang_name = LANG_NAMES.get(user_language, user_language.upper())
         nearby_places: List[Dict[str, Any]] = state.get("nearby_places") or []
         system_prompt: str = state.get("system_prompt") or ""
 
-        trace = dict(state.get("trace") or {})
-        flow = list(trace.get("_flow") or [])
-        flow.append("struct_db")
-        trace["_flow"] = flow
+        trace = append_trace_flow(state, "struct_db")
 
         # nearby_places 없으면 RAG fallback
         if not nearby_places:
@@ -48,20 +47,25 @@ def make_struct_db_node(llm: OpenAILLM):
             )
         places_text = "\n".join(places_lines)
 
-        # ── 마스코트 페르소나 블록 조립 ─────────────────────────────
-        style = state.get("mascot_struct_db_style") or ""
+        # 마스코트 페르소나 블록 조립 (ko/foreign 분기는 build_persona_block 내부에서 처리)
         name = state.get("mascot_name") or ""
+        style = (
+            state.get("mascot_struct_db_style")
+            or state.get("mascot_base_persona")
+            or ""
+        )
+        persona_block = build_persona_block(
+            base_prompt=system_prompt,
+            style=style,
+            user_language=user_language,
+            lang_name=lang_name,
+            name=name,
+            ko_fallback="당신은 관광지의 친절한 위치 안내원입니다.",
+            foreign_fallback="You are a friendly tourist guide assistant.",
+        )
 
+        # 노드별 고유 규칙 + 장소 목록 + JSON 형식 지정
         if user_language == "ko":
-            persona_lines = []
-            if system_prompt:
-                persona_lines.append(system_prompt)
-            if name:
-                persona_lines.append(f"당신의 이름은 {name}입니다.")
-            if style:
-                persona_lines.append(f"말투 지침: {style}")
-            persona_block = "\n".join(persona_lines) if persona_lines else "당신은 관광지의 친절한 위치 안내원입니다."
-
             system_msg = (
                 f"{persona_block}\n"
                 "규칙:\n"
@@ -75,28 +79,6 @@ def make_struct_db_node(llm: OpenAILLM):
                 '"emotion": "GUIDING", "category": "DIRECTION"}'
             )
         else:
-            lang_name = {"en": "English", "zh": "Chinese", "ja": "Japanese"}.get(
-                user_language, user_language.upper()
-            )
-            persona_lines = []
-            if system_prompt:
-                persona_lines.append(
-                    f"[Character setting (originally in Korean, for your reference only)]: {system_prompt}"
-                )
-            if name:
-                persona_lines.append(f"Your name is {name}.")
-            if style:
-                persona_lines.append(
-                    f"[Speech style instruction — written in Korean]: {style}\n"
-                    f"→ Translate the above Korean style instruction into {lang_name} first, "
-                    f"then follow it exactly in {lang_name}. "
-                    f"If it says to add a word/phrase at the end of sentences, "
-                    f"translate that word/phrase into {lang_name} and add it.\n"
-                    f"- CRITICAL: The style MUST be visible in your response.\n"
-                    f"- CRITICAL: Do NOT use the original Korean words — always translate them into {lang_name}."
-                )
-            persona_block = "\n".join(persona_lines) if persona_lines else f"You are a friendly tourist guide assistant."
-
             system_msg = (
                 f"{persona_block}\n"
                 "Rules:\n"
@@ -112,10 +94,8 @@ def make_struct_db_node(llm: OpenAILLM):
                 '"emotion": "GUIDING", "category": "DIRECTION"}'
             )
 
-        messages = [
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": text},
-        ]
+        # system → 이전 대화 내역(chat_history) → 현재 질문 순으로 조립
+        messages = build_messages(state, system_msg, text)
 
         method = "llm"
         error_msg = ""
@@ -126,7 +106,6 @@ def make_struct_db_node(llm: OpenAILLM):
         raw = ""
 
         _allowed_emotions = {"GUIDING", "HAPPY", "THINKING", "SORRY", "EXCITED"}
-        _allowed_categories = {"DIRECTION", "HOURS", "FACILITY", "HISTORY", "GENERAL", "ERROR"}
 
         try:
             raw = llm.chat(messages, max_tokens=200)
@@ -145,8 +124,6 @@ def make_struct_db_node(llm: OpenAILLM):
                 place_id = None
             raw_emotion = parsed.get("emotion", "GUIDING")
             emotion = raw_emotion if raw_emotion in _allowed_emotions else "GUIDING"
-            raw_category = parsed.get("category", "DIRECTION")
-            category = raw_category if raw_category in _allowed_categories else "DIRECTION"
         except (json.JSONDecodeError, ValueError, TypeError) as e:
             # JSON 파싱 실패 → raw 자체를 답변으로 사용
             answer_text = raw
@@ -173,7 +150,7 @@ def make_struct_db_node(llm: OpenAILLM):
             "answer_text": answer_text,
             "place_id": place_id,
             "emotion": emotion,
-            "category": category,
+            "category": "DIRECTION",
             "check_result": "good",
             "trace": trace,
         }

@@ -2,15 +2,11 @@
 구조화 RAG v2 — PDF 처리 파이프라인
 
 흐름:
-  PDF bytes → pymupdf4llm(마크다운 변환) → # 헤더 기반 섹션 파싱
-  → GPT-4o 검색용 요약 생성 → 요약 임베딩 → DB 저장
+  PDF bytes → LlamaParse(마크다운 변환, Agentic 모드)
+           → # 헤더 기반 섹션 파싱
+           → GPT 검색용 요약 생성 → 요약 임베딩 → DB 저장
 
 기존 PDF2db.py(v1)와 독립적으로 동작하며, tb_doc_chunk_v2 테이블에 저장.
-
-개선점:
-1. 기존의 단일 title -> 계층적 title
-2. overlap이 글자 단위에서 문장 단위로 개선
-3. 임베딩 시 section_title + summary + keywords 조합
 """
 from __future__ import annotations
 
@@ -19,7 +15,6 @@ import re
 import tempfile
 from typing import List, Dict, Any
 
-import pymupdf4llm
 from psycopg.types.json import Jsonb
 
 from app.core.DB.connect_db import get_conn
@@ -31,23 +26,46 @@ MODEL_NAME = "text-embedding-3-small"
 SUMMARY_MODEL_NAME = "gpt-5-mini"
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ── 1) PDF → 마크다운 변환 ──────────────────────────────────────────────────
+
+# ── 1) PDF → 마크다운 변환 (LlamaParse Agentic 모드) ────────────────────────
 
 def pdf_to_markdown(pdf_bytes: bytes) -> str:
-    """PDF bytes를 pymupdf4llm으로 마크다운 텍스트로 변환."""
-    # pymupdf4llm은 파일 경로를 요구하므로 임시 파일로 저장
+    """LlamaParse Agentic 모드로 PDF bytes를 마크다운 텍스트로 변환.
+
+    복잡한 레이아웃(멀티컬럼, 표, 이미지 오버레이)을 AI 기반으로 처리.
+    환경변수 LLAMA_CLOUD_API_KEY 필요.
+    """
+    from llama_cloud_services.parse.base import LlamaParse
+
+    api_key = os.getenv("LLAMA_CLOUD_API_KEY")
+    if not api_key:
+        raise RuntimeError("LLAMA_CLOUD_API_KEY 환경변수가 설정되지 않았습니다.")
+
+    parser = LlamaParse(
+        api_key=api_key,
+        result_type="markdown",
+        language="ko",
+        parse_mode="parse_page_with_agent",  # 웹 UI Agentic 10크레딧/페이지
+        system_prompt=(
+            "각 섹션을 헤더(#,##, ###,####)로 명확히 구분하여 마크다운으로 출력하세요. "
+            "표는 마크다운 표 형식을 사용하고, 본문 내용은 빠짐없이 포함하세요."
+        ),
+        split_by_page=False,
+    )
+
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(pdf_bytes)
         tmp_path = tmp.name
-
     try:
-        md_text = pymupdf4llm.to_markdown(tmp_path)
+        documents = parser.load_data(tmp_path)
     finally:
         os.unlink(tmp_path)
 
-    # 소제목 패턴(1), 2), …)을 ### 헤더로 변환 → 의미 단위 청크 분할 지원
-    md_text = re.sub(r'^(\d+)\)\s*', r'### \1) ', md_text, flags=re.MULTILINE)
+    if not documents:
+        raise RuntimeError("LlamaParse가 빈 결과를 반환했습니다.")
 
+    md_text = "\n\n".join(doc.text for doc in documents)
+    print(f"[pdf_to_md] LlamaParse 완료: {len(documents)}페이지, {len(md_text)}자", flush=True)
     return md_text
 
 
@@ -71,7 +89,6 @@ def parse_markdown_sections(
     - 너무 짧은 청크는 앞 청크와 병합
     """
     header_pattern = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
-    numbered_header_pattern = re.compile(r"^(\d+(?:\.\d+)*[.)]?)\s+(.+?)\s*$", re.MULTILINE)
 
     def split_sentences(text: str) -> List[str]:
         text = text.strip()
@@ -129,74 +146,86 @@ def parse_markdown_sections(
     for m in header_pattern.finditer(md_text):
         matches.append(("md", m.start(), m))
 
-    for m in numbered_header_pattern.finditer(md_text):
-        matches.append(("num", m.start(), m))
-
     matches.sort(key=lambda x: x[1])
 
     if not matches:
         raw = md_text.strip()
         if not raw:
             return []
-        
+
         paragraphs = [p.strip() for p in re.split(r"\n\s*\n", raw) if p.strip()]
-        
+
         if len(paragraphs) == 1:
-            return [{
-                "section_title": "본문",
-                "content": raw,
-                "level": 0,
-            }]
-        
-        return [
-            {
-                "section_title": f"본문 {i+1}",
-                "content": paragraph,
-                "level": 0,
-            }
-            for i, paragraph in enumerate(paragraphs)
-        ]
-    title_stack: List[str] = []
+            sections.append({"section_title": "본문", "content": raw, "level": 0})
+        else:
+            for i, paragraph in enumerate(paragraphs):
+                sections.append({"section_title": f"본문 {i+1}", "content": paragraph, "level": 0})
 
-    first_start = matches[0][1]
-    preamble = md_text[:first_start].strip()
-    if preamble:
-        sections.append({
-            "section_title": "서론",
-            "content": preamble,
-            "level": 0,
-        })
+    if matches:
+        # level → title 매핑 (계층 구조 유지용)
+        level_titles: Dict[int, str] = {}
 
-    for i, (kind, _, match) in enumerate(matches):
-        if kind == "md":
+        first_start = matches[0][1]
+        preamble = md_text[:first_start].strip()
+        if preamble:
+            sections.append({
+                "section_title": "서론",
+                "content": preamble,
+                "level": 0,
+            })
+
+        for i, (_, _, match) in enumerate(matches):
             level = len(match.group(1))
             title = match.group(2).strip()
-        else:
-            num_token = match.group(1).strip()
-            title = match.group(2).strip()
-            level = num_token.count(".") + 1
-        
-        if len(title) > 80 or len(title.split()) > 12:
-            title = f"섹션 {i+1}"
-        if not title:
-            title = f"섹션 {i+1}"
 
-        content_start = match.end()
-        content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
-        content = md_text[content_start:content_end].strip()
+            # 제목이 너무 길면 본문으로 취급 (pymupdf4llm이 body를 h5로 잘못 변환하는 경우)
+            if len(title) > 80:
+                content_start = match.start()
+                content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
+                body = md_text[content_start:content_end].strip()
+                if body:
+                    if sections:
+                        sections[-1]["content"] = f"{sections[-1]['content']}\n\n{body}".strip()
+                    else:
+                        sections.append({"section_title": f"섹션 {i+1}", "content": body, "level": 0})
+                continue
 
-        if not content:
-            continue
+            if not title:
+                title = f"섹션 {i+1}"
 
-        title_stack = title_stack[:level - 1]
-        title_stack.append(title)
-        section_title = " > ".join(title_stack)
+            # 숫자만으로 된 제목(페이지 번호 등)은 계층 구조에서 제외
+            if re.match(r"^\d{1,3}$", title):
+                content_start = match.end()
+                content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
+                body = md_text[content_start:content_end].strip()
+                if body:
+                    if sections:
+                        sections[-1]["content"] = f"{sections[-1]['content']}\n\n{body}".strip()
+                    else:
+                        sections.append({"section_title": f"섹션 {i+1}", "content": body, "level": 0})
+                continue
 
-        sections.append({
-            "section_title": section_title,
-            "content": content,
-            "level": level,
-        })
+            content_start = match.end()
+            content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
+            content = md_text[content_start:content_end].strip()
+
+            # 현재 level 이상의 기존 항목 제거 → 같은 레벨은 형제로 처리
+            for lv in [lv for lv in level_titles if lv >= level]:
+                del level_titles[lv]
+            level_titles[level] = title
+
+            if not content:
+                # 하위 헤더만 따르는 상위 헤더: 계층 구조는 유지하되 빈 섹션은 건너뜀
+                continue
+            section_title = " > ".join(
+                level_titles[lv] for lv in sorted(level_titles.keys())
+            )
+
+            sections.append({
+                "section_title": section_title,
+                "content": content,
+                "level": level,
+            })
 
     # 너무 긴 섹션은 문단 기준으로 분할
     split_sections: List[Dict[str, Any]] = []
@@ -301,9 +330,14 @@ def generate_search_summary(
         # 1) 제어 문자 제거
         text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
         # 2) 서로게이트 문자 제거 (JSON 직렬화 깨뜨리는 원인)
-        text = text.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+        text = text.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='ignore')
         # 3) JSON에서 문제 되는 특수 유니코드 제거 (BOM, 제로폭 문자 등)
         text = re.sub(r'[\ufffe\uffff\ufeff\ufdd0-\ufdef]', '', text)
+        # 4) JSON 직렬화 가능한지 최종 확인
+        try:
+            json.dumps(text)
+        except (ValueError, UnicodeEncodeError):
+            text = text.encode('ascii', errors='ignore').decode('ascii')
         return text
 
     content = _sanitize(safe_content)
@@ -336,13 +370,25 @@ def generate_search_summary(
 
 중요: keywords에는 텍스트에 나오는 고유명사(인물, 장소, 사건)를 모두 포함해야 합니다. 누락하지 마세요."""
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
+    # 요청 전 JSON 직렬화 검증
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    try:
+        json.dumps(messages, ensure_ascii=False)
+    except (ValueError, UnicodeEncodeError) as e:
+        print(f"[summary] WARNING: 메시지 JSON 직렬화 실패, ASCII로 폴백: {e}", flush=True)
+        user_prompt = user_prompt.encode('ascii', errors='ignore').decode('ascii')
+        messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
-        ],
-        #temperature=0.1, temperature 지원안함 
+        ]
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        #temperature=0.1, temperature 지원안함
         #max_tokens=500, gpt-5-mini는 max_tokens 대신 max_completion_tokens 사용
         # 제한을 안두는게 맞을듯max_completion_tokens=2000, #질문도 포함해서 4096 토큰까지 지원하므로 알아서 설정하게
         response_format={"type": "json_object"},
@@ -487,7 +533,7 @@ def process_pdf_bytes_v2(
                 "section_level": sec["level"],
                 "embed_model": MODEL_NAME,
                 "summary_model": SUMMARY_MODEL_NAME,
-                "extractor": "pymupdf4llm",
+                "extractor": "llamaparse",
                 "pipeline_version": "v2",
             }
 

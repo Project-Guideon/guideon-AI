@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List
 
 import numpy as np
+from langsmith import traceable
 
 from app.core.services.rag_pgvector import PgVectorRAG
 from app.graph.state import GraphState
@@ -66,6 +67,7 @@ def make_retrieve_node(rag: PgVectorRAG):
     - retry_count  > 0 : top_k * 2 후보 + DB 저장 임베딩 → MMR 선택 (재인코딩 없음)
     """
 
+    @traceable(name="retrieve_node", run_type="retriever")
     def retrieve_node(state: GraphState) -> dict:
         query: str = state.get("retrieval_query_ko") or state.get("normalized_text", "")
         site_id: int = state.get("site_id", 1)

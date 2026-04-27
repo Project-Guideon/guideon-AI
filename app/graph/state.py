@@ -38,6 +38,9 @@ class GraphState(TypedDict, total=False):
     tts_text: str              # TTS용 보정 텍스트
     tts_audio: bytes           # Google TTS 반환 오디오 bytes
 
+    # ── 대화 내역 (Redis) ─────────────────────────────────────────────────
+    chat_history: List[Dict[str, Any]]  # [{"role": "user"|"assistant", "content": "..."}]
+
     # ── 요청 디바이스 / 마스코트 정보 ────────────────────────────────────
     device_id: str                  # 디바이스 ID (fetch_places_node가 Spring Boot places API 호출 시 사용)
     system_prompt: str              # 마스코트 캐릭터 프롬프트 (tb_mascot.system_prompt)
