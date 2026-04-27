@@ -56,7 +56,7 @@ def make_intent_gate_node(llm: OpenAILLM):
                     "Key distinction: 'Where is the restroom?' → struct_db (finding a place)\n"
                     "                 'What was the restroom area used for historically?' → rag (learning)\n"
                     "\n"
-                    "3. TRANSLATE to Korean (retrieval_query_ko):\n"
+                    "3. TRANSLATE to Korean(retrieval_query_ko):\n"
                     "   - Translate the input into Korean LITERALLY word-for-word\n"
                     "   - Do NOT interpret, summarize, or add any words not present in the original\n"
                     "   - If the input is already Korean, return it as-is\n"
