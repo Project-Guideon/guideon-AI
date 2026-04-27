@@ -266,18 +266,25 @@ async def ws_stream(websocket: WebSocket):
         except (WebSocketDisconnect, RuntimeError):
             return
 
-        start = json.loads(raw_start)
-        if start.get("type") != "start":
+        try:
+            start = json.loads(raw_start)
+            if start.get("type") != "start":
+                await safe_send({
+                    "type": "error", "code": "BAD_REQUEST",
+                    "message": "first message must be {type:'start'}",
+                    "trace_id": trace_id,
+                })
+                return
+            site_id        = int(start.get("site_id", 1))
+            stt_language   = start.get("language_code", "ko-KR")
+            sample_rate_hz = int(start.get("sample_rate_hz", 16000))
+        except (json.JSONDecodeError, ValueError, TypeError) as exc:
             await safe_send({
                 "type": "error", "code": "BAD_REQUEST",
-                "message": "first message must be {type:'start'}",
+                "message": f"invalid start payload: {exc}",
                 "trace_id": trace_id,
             })
             return
-
-        site_id        = int(start.get("site_id", 1))
-        stt_language   = start.get("language_code", "ko-KR")
-        sample_rate_hz = int(start.get("sample_rate_hz", 16000))
         interim_results = bool(start.get("interim_results", True))
         tts_stream_on  = bool(start.get("tts_stream", True))
         realtime       = bool(start.get("realtime", False))
