@@ -128,12 +128,10 @@ async def internal_qa(req: InternalQaRequest):
         "zh": "抱歉, 我没有找到相关信息。",
     }
 
-    final_answer = answer if answer.strip() else fallback_answers.get(lang2, fallback_answers["en"])
-
     return InternalQaResponse(
-        answer=final_answer,
+        answer=answer or fallback_answers.get(lang2, fallback_answers["en"]),
         placeId=result.get("place_id"),
-        emotion=result.get("emotion") or ("GUIDING" if answer_found else "SORRY"),
+        emotion=result.get("emotion") or ("GUIDING" if answer else "SORRY"),
         language=lang2,
         category=result.get("category") or "GENERAL",
         answerFound=answer_found,

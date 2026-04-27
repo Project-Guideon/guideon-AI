@@ -152,88 +152,80 @@ def parse_markdown_sections(
         raw = md_text.strip()
         if not raw:
             return []
-        
+
         paragraphs = [p.strip() for p in re.split(r"\n\s*\n", raw) if p.strip()]
-        
+
         if len(paragraphs) == 1:
-            return [{
-                "section_title": "본문",
-                "content": raw,
+            sections.append({"section_title": "본문", "content": raw, "level": 0})
+        else:
+            for i, paragraph in enumerate(paragraphs):
+                sections.append({"section_title": f"본문 {i+1}", "content": paragraph, "level": 0})
+
+    if matches:
+        # level → title 매핑 (계층 구조 유지용)
+        level_titles: Dict[int, str] = {}
+
+        first_start = matches[0][1]
+        preamble = md_text[:first_start].strip()
+        if preamble:
+            sections.append({
+                "section_title": "서론",
+                "content": preamble,
                 "level": 0,
-            }]
-        
-        return [
-            {
-                "section_title": f"본문 {i+1}",
-                "content": paragraph,
-                "level": 0,
-            }
-            for i, paragraph in enumerate(paragraphs)
-        ]
-    # level → title 매핑 (계층 구조 유지용)
-    level_titles: Dict[int, str] = {}
+            })
 
-    first_start = matches[0][1]
-    preamble = md_text[:first_start].strip()
-    if preamble:
-        sections.append({
-            "section_title": "서론",
-            "content": preamble,
-            "level": 0,
-        })
+        for i, (_, _, match) in enumerate(matches):
+            level = len(match.group(1))
+            title = match.group(2).strip()
 
-    for i, (kind, _, match) in enumerate(matches):
-        level = len(match.group(1))
-        title = match.group(2).strip()
+            # 제목이 너무 길면 본문으로 취급 (pymupdf4llm이 body를 h5로 잘못 변환하는 경우)
+            if len(title) > 80:
+                content_start = match.start()
+                content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
+                body = md_text[content_start:content_end].strip()
+                if body:
+                    if sections:
+                        sections[-1]["content"] = f"{sections[-1]['content']}\n\n{body}".strip()
+                    else:
+                        sections.append({"section_title": f"섹션 {i+1}", "content": body, "level": 0})
+                continue
 
-        # 제목이 너무 길면 본문으로 취급 (pymupdf4llm이 body를 h5로 잘못 변환하는 경우)
-        if len(title) > 80:
-            content_start = match.start()
-            content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
-            body = md_text[content_start:content_end].strip()
-            if body:
-                if sections:
-                    sections[-1]["content"] = f"{sections[-1]['content']}\n\n{body}".strip()
-                else:
-                    sections.append({"section_title": f"섹션 {i+1}", "content": body, "level": 0})
-            continue
+            if not title:
+                title = f"섹션 {i+1}"
 
-        if not title:
-            title = f"섹션 {i+1}"
+            # 숫자만으로 된 제목(페이지 번호 등)은 계층 구조에서 제외
+            if re.match(r"^\d{1,3}$", title):
+                content_start = match.end()
+                content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
+                body = md_text[content_start:content_end].strip()
+                if body:
+                    if sections:
+                        sections[-1]["content"] = f"{sections[-1]['content']}\n\n{body}".strip()
+                    else:
+                        sections.append({"section_title": f"섹션 {i+1}", "content": body, "level": 0})
+                continue
 
-        # 숫자만으로 된 제목(페이지 번호 등)은 계층 구조에서 제외
-        if re.match(r"^\d{1,3}$", title):
             content_start = match.end()
             content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
-            body = md_text[content_start:content_end].strip()
-            if body:
-                if sections:
-                    sections[-1]["content"] = f"{sections[-1]['content']}\n\n{body}".strip()
-                else:
-                    sections.append({"section_title": f"섹션 {i+1}", "content": body, "level": 0})
-            continue
+            content = md_text[content_start:content_end].strip()
 
-        content_start = match.end()
-        content_end = matches[i + 1][1] if i + 1 < len(matches) else len(md_text)
-        content = md_text[content_start:content_end].strip()
+            # 현재 level 이상의 기존 항목 제거 → 같은 레벨은 형제로 처리
+            for lv in [lv for lv in level_titles if lv >= level]:
+                del level_titles[lv]
+            level_titles[level] = title
 
-        # 현재 level 이상의 기존 항목 제거 → 같은 레벨은 형제로 처리
-        for lv in [lv for lv in level_titles if lv >= level]:
-            del level_titles[lv]
-        level_titles[level] = title
+            if not content:
+                # 하위 헤더만 따르는 상위 헤더: 계층 구조는 유지하되 빈 섹션은 건너뜀
+                continue
+            section_title = " > ".join(
+                level_titles[lv] for lv in sorted(level_titles.keys())
+            )
 
-        if not content:
-            # 하위 헤더만 따르는 상위 헤더: 계층 구조는 유지하되 빈 섹션은 건너뜀
-            continue
-        section_title = " > ".join(
-            level_titles[lv] for lv in sorted(level_titles.keys())
-        )
-
-        sections.append({
-            "section_title": section_title,
-            "content": content,
-            "level": level,
-        })
+            sections.append({
+                "section_title": section_title,
+                "content": content,
+                "level": level,
+            })
 
     # 너무 긴 섹션은 문단 기준으로 분할
     split_sections: List[Dict[str, Any]] = []
