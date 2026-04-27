@@ -118,7 +118,7 @@ async def internal_qa(req: InternalQaRequest):
 
     result = await asyncio.to_thread(traced_internal_run, initial_state)
 
-    answer = result.get("answer_text", "")
+    answer = (result.get("answer_text") or "").strip()
     answer_found = result.get("check_result") == "good"
 
     fallback_answers = {
