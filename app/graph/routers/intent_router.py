@@ -17,8 +17,7 @@ def intent_router(state: GraphState) -> str:
         "smalltalk"    → smalltalk 노드
         "event"        → event 노드
         "struct_db"    → struct_db 노드
-        "retrieve"     → RAG (KO) 경로
-        "translate_ko" → RAG (Foreign) 경로
+        "retrieve"     → RAG 경로
     """
     ranking: List[str] = state.get("intent_ranking") or ["rag"]
     index: int = state.get("current_intent_index", 0)
@@ -33,7 +32,6 @@ def intent_router(state: GraphState) -> str:
         intent = "rag"
 
     if intent == "rag":
-        # translate_ko 단계 제거: intent_gate에서 retrieval_query_ko를 이미 생성함
         return "retrieve"
 
     return intent  # "smalltalk" | "event" | "struct_db"
