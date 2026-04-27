@@ -79,7 +79,7 @@ def make_intent_gate_node(llm: OpenAILLM):
         corrected_text = text      # 기본값: 보정 없음
         retrieval_query_ko = text  # 기본값: 원문 그대로
         try:
-            raw = llm.chat(messages, max_tokens=150)
+            raw = llm.chat(messages, max_tokens=256)
             parsed = json.loads(raw)
             if not isinstance(parsed, dict):
                 raise ValueError(f"LLM response is not a JSON object: {type(parsed).__name__}")
