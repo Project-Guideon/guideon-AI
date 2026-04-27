@@ -118,7 +118,7 @@ async def internal_qa(req: InternalQaRequest):
 
     result = await asyncio.to_thread(traced_internal_run, initial_state)
 
-    answer = result.get("answer_text", "")
+    answer = (result.get("answer_text") or "").strip()
     answer_found = result.get("check_result") == "good"
 
     fallback_answers = {
@@ -128,8 +128,10 @@ async def internal_qa(req: InternalQaRequest):
         "zh": "抱歉, 我没有找到相关信息。",
     }
 
+    final_answer = answer if answer.strip() else fallback_answers.get(lang2, fallback_answers["en"])
+
     return InternalQaResponse(
-        answer=answer if answer_found else fallback_answers.get(lang2, fallback_answers["en"]),
+        answer=final_answer,
         placeId=result.get("place_id"),
         emotion=result.get("emotion") or ("GUIDING" if answer_found else "SORRY"),
         language=lang2,
