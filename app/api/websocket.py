@@ -299,7 +299,7 @@ async def ws_stream(websocket: WebSocket):
                     "sample_rate_hz": sample_rate_hz, "interim_results": interim_results,
                     "tts_stream": tts_stream_on, "realtime": realtime, "mascot": mascot},
         ):
-            audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue(maxsize=200)
+            audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue(maxsize=150)
             timing = {
                 "ws_start_at": time.perf_counter(),
                 "first_audio_at": None, "last_audio_at": None,
