@@ -19,7 +19,6 @@ from app.graph.nodes.input.normalize_node import normalize_node
 from app.graph.nodes.classify.intent_gate import make_intent_gate_node
 
 # ── 노드: rag ─────────────────────────────────────────────────────────────────
-# from app.graph.nodes.rag.translate_node import make_translate_node  # intent_gate에서 처리
 from app.graph.nodes.rag.retrieve_node import make_retrieve_node
 from app.graph.nodes.rag.retrieve_node_v2 import make_retrieve_node_v2
 from app.graph.nodes.rag.context_pack import context_pack_node
@@ -54,7 +53,6 @@ def _register_core_nodes(builder: StateGraph, rag: PgVectorRAG, llm: OpenAILLM):
 
     builder.add_node("fetch_places",       fetch_places_node)
     builder.add_node("struct_db",          make_struct_db_node(llm))
-    # builder.add_node("translate_ko",       make_translate_node(llm))  # intent_gate에서 처리
 
     _retrieve = make_retrieve_node_v2(rag) if isinstance(rag, PgVectorRAG_V2) else make_retrieve_node(rag)
     builder.add_node("retrieve",           _retrieve)
@@ -79,7 +77,6 @@ def _register_core_edges(builder: StateGraph, end_node: str):
     builder.add_edge("struct_db",      "fallback_dispatch")
 
     # ── RAG 파이프라인 고정 구간 ──────────────────────────────────────
-    # builder.add_edge("translate_ko",    "retrieve")  # intent_gate에서 처리
     builder.add_edge("retrieve",        "context_pack")
     builder.add_edge("context_pack",    "answer_generate")
     builder.add_edge("answer_generate", "answer_check")
@@ -96,7 +93,6 @@ def _register_core_edges(builder: StateGraph, end_node: str):
             "event":        "event",
             "struct_db":    "fetch_places",  # DB 조회 후 struct_db 로
             "retrieve":     "retrieve",      # RAG (KO/Foreign 모두)
-            # "translate_ko": "translate_ko",  # intent_gate에서 처리
         },
     )
 
@@ -120,7 +116,6 @@ def _register_core_edges(builder: StateGraph, end_node: str):
             "event":        "event",
             "struct_db":    "fetch_places",  # fallback 시에도 DB 재조회
             "retrieve":     "retrieve",
-            # "translate_ko": "translate_ko",  # intent_gate에서 처리
             "clarify":      "clarify",
         },
     )
