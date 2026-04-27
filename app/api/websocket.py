@@ -268,6 +268,13 @@ async def ws_stream(websocket: WebSocket):
 
         try:
             start = json.loads(raw_start)
+            if not isinstance(start, dict):
+                await safe_send({
+                    "type": "error", "code": "BAD_REQUEST",
+                    "message": "start payload must be a JSON object",
+                    "trace_id": trace_id,
+                })
+                return
             if start.get("type") != "start":
                 await safe_send({
                     "type": "error", "code": "BAD_REQUEST",
@@ -299,7 +306,7 @@ async def ws_stream(websocket: WebSocket):
                     "sample_rate_hz": sample_rate_hz, "interim_results": interim_results,
                     "tts_stream": tts_stream_on, "realtime": realtime, "mascot": mascot},
         ):
-            audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue(maxsize=150)
+            audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue(maxsize=250)
             timing = {
                 "ws_start_at": time.perf_counter(),
                 "first_audio_at": None, "last_audio_at": None,
