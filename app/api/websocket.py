@@ -418,7 +418,7 @@ async def ws_stream(websocket: WebSocket):
 
             answer_text = extract_answer_text(qa_result) or "죄송해요. 답변을 생성하지 못했어요."
             sentences = split_sentences(answer_text)
-            qa_category = (qa_result.get("category") if isinstance(qa_result, dict) else None) or "GENERAL"
+            qa_category = (qa_result.get("category") if isinstance(qa_result, dict) else getattr(qa_result, "category", None)) or "GENERAL"
 
             tts_first_audio_latency_ms = None
             tts_total_ms = None
