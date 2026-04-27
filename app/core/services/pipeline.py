@@ -25,6 +25,7 @@ class VoiceQAResult:
 class TextQAResult:
     query: str
     answer: str
+    category: str = "GENERAL"
     contexts: List[Dict[str, Any]] = field(default_factory=list)
     trace: Dict[str, Any] = field(default_factory=dict)
 
@@ -56,6 +57,7 @@ class TextPipeline:
         return TextQAResult(
             query=query,
             answer=result.get("answer_text", ""),
+            category=result.get("category", "GENERAL"),
             contexts=result.get("retrieved_chunks", []),
             trace=result.get("trace", {}),
         )
