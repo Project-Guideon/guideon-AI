@@ -26,6 +26,7 @@ class TextQAResult:
     query: str
     answer: str
     category: str = "GENERAL"
+    answer_found: bool = False
     contexts: List[Dict[str, Any]] = field(default_factory=list)
     trace: Dict[str, Any] = field(default_factory=dict)
 
@@ -72,6 +73,7 @@ class TextPipeline:
             query=query,
             answer=result.get("answer_text", ""),
             category=result.get("category", "GENERAL"),
+            answer_found=result.get("check_result") == "good",
             contexts=result.get("retrieved_chunks", []),
             trace=result.get("trace", {}),
         )

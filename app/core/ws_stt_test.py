@@ -6,8 +6,8 @@ import websockets
 import base64
 import time
 
-WS_URL = "ws://127.0.0.1:8000/ws/stream"
-WAV_PATH = "wav/jp_03.wav"
+WS_URL = "ws://localhost:8082/ws/v1/kiosk/stt?sessionId=b5e95ed7-aac2-483b-aa03-71b3b66fa5d6&siteId=5&languageCode=ko-KR&token=kiosk-south-01-test"
+WAV_PATH = "ko_04.wav"
 
 CHUNK_MS = 50
 SAVE_TTS_AUDIO = True
@@ -36,15 +36,6 @@ async def main():
     chunk_size = bytes_per_ms * CHUNK_MS
 
     async with websockets.connect(WS_URL, max_size=20_000_000) as ws:
-
-        await ws.send(json.dumps({
-            "type": "start",
-            "language_code": "ko-KR",
-            "sample_rate_hz": 16000,
-            "interim_results": True,
-            "tts_stream": True,
-            "realtime": True
-        }))
 
         t0 = time.perf_counter()
 
@@ -90,7 +81,8 @@ async def main():
                 elif t == "final_text":
 
                     print("\n[FINAL ANSWER]")
-                    print(data["answer"])
+                    print("answer  :", data.get("answer"))
+                    print("category:", data.get("category"))
 
                 elif t == "done":
 

@@ -136,6 +136,23 @@ def extract_answer_text(result) -> str:
 # Traceable 래퍼
 # ──────────────────────────────────────────────
 
+def extract_answer_found(result, category: str, answer_text: str) -> bool:
+    value = None
+    if isinstance(result, dict):
+        value = result.get("answer_found")
+        if value is None:
+            value = result.get("answerFound")
+    elif result is not None:
+        value = getattr(result, "answer_found", None)
+        if value is None:
+            value = getattr(result, "answerFound", None)
+
+    if value is not None:
+        return bool(value)
+
+    return bool((answer_text or "").strip()) and (category or "").upper() != "ERROR"
+
+
 @traceable(name="emit_latency_summary", run_type="tool")
 def emit_latency_summary(
     trace_id: str, site_id: int, realtime: bool, tts_stream: bool,
@@ -510,6 +527,7 @@ async def ws_stream(websocket: WebSocket):
             answer_text = extract_answer_text(qa_result) or "죄송해요. 답변을 생성하지 못했어요."
             sentences = split_sentences(answer_text)
             qa_category = (qa_result.get("category") if isinstance(qa_result, dict) else getattr(qa_result, "category", None)) or "GENERAL"
+            qa_answer_found = extract_answer_found(qa_result, qa_category, answer_text)
 
             tts_first_audio_latency_ms = None
             tts_total_ms = None
@@ -553,7 +571,8 @@ async def ws_stream(websocket: WebSocket):
                 await safe_send({
                     "type": "final_text", "site_id": site_id,
                     "language_code": last_lang_code, "query": query,
-                    "answer": answer_text, "category": qa_category, "trace_id": trace_id,
+                    "answer": answer_text, "category": qa_category,
+                    "answer_found": qa_answer_found, "trace_id": trace_id,
                 })
                 await safe_send({"type": "status", "stage": "graph_stream_done", "trace_id": trace_id})
 
@@ -571,7 +590,8 @@ async def ws_stream(websocket: WebSocket):
                 await safe_send({
                     "type": "final_text", "site_id": site_id,
                     "language_code": last_lang_code, "query": query,
-                    "answer": answer_text, "category": qa_category, "trace_id": trace_id,
+                    "answer": answer_text, "category": qa_category,
+                    "answer_found": qa_answer_found, "trace_id": trace_id,
                 })
 
                 qa_first_sentence_ms = None
