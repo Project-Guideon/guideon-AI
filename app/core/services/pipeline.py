@@ -40,6 +40,10 @@ class TextPipeline:
         site_id: int = 1,
         language_code: str = "ko",
         mascot: Dict[str, Any] | None = None,
+        device_id: str | None = None,
+        chat_history: List[Dict[str, Any]] | None = None,
+        daily_infos: List[Dict[str, Any]] | None = None,
+        device_location: Dict[str, Any] | None = None,
     ) -> TextQAResult:
         lang2 = language_code.split("-")[0].lower()  # "ko-KR" → "ko"
         initial_state: Dict[str, Any] = {
@@ -49,8 +53,18 @@ class TextPipeline:
             "site_id": site_id,
             "top_k": 5,
             "retry_count": 0,
+            "chat_history": chat_history or [],
+            "nearby_places": [],
+            "daily_infos": daily_infos or [],
+            "device_location": device_location or {},
+            "place_category": None,
+            "place_id": None,
+            "emotion": "",
+            "category": "",
             "trace": {},
         }
+        if device_id:
+            initial_state["device_id"] = device_id
         if mascot:
             initial_state.update(mascot)
         result = self.graph.invoke(initial_state)

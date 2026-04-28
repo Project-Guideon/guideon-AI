@@ -95,6 +95,7 @@ async def internal_qa(req: InternalQaRequest):
         "user_language": lang2,
         "site_id": req.siteId,
         "device_id": req.deviceId,
+        "device_location": req.deviceLocation.model_dump() if req.deviceLocation else {},
         "system_prompt": req.systemPrompt or "",
         "mascot_name":            req.mascotName or "",
         "mascot_greeting":        req.greetingMsg or "",

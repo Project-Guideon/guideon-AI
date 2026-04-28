@@ -25,6 +25,7 @@ from google.api_core import exceptions as google_exceptions
 from langsmith import trace as ls_trace, traceable
 
 from app.core.dependencies import stt, tts, traced_text_run
+from app.core.services.chat_history import load_chat_history
 
 router = APIRouter()
 
@@ -57,19 +58,64 @@ def split_sentences(text: str) -> list[str]:
     return [p.strip() for p in parts if p and p.strip()]
 
 
-def normalize_mascot_payload(raw_mascot: object) -> dict:
-    if not isinstance(raw_mascot, dict):
-        raw_mascot = {}
+def _as_dict(value: object) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _first_non_empty(*values: object) -> object:
+    for value in values:
+        if value is not None and value != "":
+            return value
+    return ""
+
+
+def _prompt_config_value(raw_mascot: dict, prompt_config: dict, flat_key: str, chat_key: str) -> object:
+    return _first_non_empty(raw_mascot.get(flat_key), prompt_config.get(chat_key), prompt_config.get(flat_key))
+
+
+def normalize_mascot_payload(raw_mascot: object, raw_start: object | None = None) -> dict:
+    raw_mascot = _as_dict(raw_mascot)
+    raw_start = _as_dict(raw_start)
+    prompt_config = _as_dict(raw_start.get("promptConfig") or raw_mascot.get("promptConfig"))
     return {
-        "system_prompt":           raw_mascot.get("system_prompt", "") or "",
-        "mascot_name":             raw_mascot.get("mascot_name", "") or "",
-        "mascot_greeting":         raw_mascot.get("mascot_greeting", "") or "",
-        "mascot_base_persona":     raw_mascot.get("mascot_base_persona", "") or "",
-        "mascot_smalltalk_style":  raw_mascot.get("mascot_smalltalk_style", "") or "",
-        "mascot_struct_db_style":  raw_mascot.get("mascot_struct_db_style", "") or "",
-        "mascot_RAG_style":        raw_mascot.get("mascot_RAG_style", "") or "",
-        "mascot_event_style":      raw_mascot.get("mascot_event_style", "") or "",
+        "system_prompt":          _first_non_empty(raw_mascot.get("system_prompt"), raw_start.get("systemPrompt")),
+        "mascot_name":            _first_non_empty(raw_mascot.get("mascot_name"), raw_start.get("name")),
+        "mascot_greeting":        _first_non_empty(raw_mascot.get("mascot_greeting"), raw_start.get("greetingMsg")),
+        "mascot_base_persona":    _prompt_config_value(raw_mascot, prompt_config, "mascot_base_persona", "base_persona"),
+        "mascot_smalltalk_style": _prompt_config_value(raw_mascot, prompt_config, "mascot_smalltalk_style", "smalltalk_style"),
+        "mascot_struct_db_style": _prompt_config_value(raw_mascot, prompt_config, "mascot_struct_db_style", "struct_db_style"),
+        "mascot_RAG_style":       _prompt_config_value(raw_mascot, prompt_config, "mascot_RAG_style", "RAG_style"),
+        "mascot_event_style":     _prompt_config_value(raw_mascot, prompt_config, "mascot_event_style", "event_node_style"),
     }
+
+
+def normalize_daily_infos_payload(raw_context: object) -> list[dict]:
+    if not isinstance(raw_context, dict):
+        return []
+    raw_daily_infos = raw_context.get("dailyInfos") or []
+    if not isinstance(raw_daily_infos, list):
+        return []
+
+    daily_infos: list[dict] = []
+    for item in raw_daily_infos:
+        if not isinstance(item, dict):
+            continue
+        daily_infos.append({
+            "placeName": item.get("placeName", "") or "",
+            "infoType": item.get("infoType", "") or "",
+            "content": item.get("content", "") or "",
+        })
+    return daily_infos
+
+
+def normalize_device_location_payload(raw_location: object) -> dict:
+    if not isinstance(raw_location, dict):
+        return {}
+    latitude = raw_location.get("latitude")
+    longitude = raw_location.get("longitude")
+    if latitude is None or longitude is None:
+        return {}
+    return {"latitude": latitude, "longitude": longitude}
 
 
 def extract_answer_text(result) -> str:
@@ -116,9 +162,27 @@ def traced_tts_synthesize(sentence: str, tts_language_code: str):
 
 
 @traceable(name="ws_text_qa_invoke", run_type="chain")
-def traced_ws_text_qa_invoke(query: str, site_id: int, language_code: str, mascot: dict | None = None):
+def traced_ws_text_qa_invoke(
+    query: str,
+    site_id: int,
+    language_code: str,
+    mascot: dict | None = None,
+    device_id: str | None = None,
+    chat_history: list[dict] | None = None,
+    daily_infos: list[dict] | None = None,
+    device_location: dict | None = None,
+):
     mascot = normalize_mascot_payload(mascot)
-    return traced_text_run(query, site_id, language_code, mascot)
+    return traced_text_run(
+        query=query,
+        site_id=site_id,
+        language_code=language_code,
+        mascot=mascot,
+        device_id=device_id,
+        chat_history=chat_history,
+        daily_infos=daily_infos,
+        device_location=device_location,
+    )
 
 
 # ──────────────────────────────────────────────
@@ -282,9 +346,15 @@ async def ws_stream(websocket: WebSocket):
                     "trace_id": trace_id,
                 })
                 return
-            site_id        = int(start.get("site_id", 1))
-            stt_language   = start.get("language_code", "ko-KR")
-            sample_rate_hz = int(start.get("sample_rate_hz", 16000))
+            site_id        = int(start.get("siteId") or start.get("site_id") or 1)
+            stt_language   = start.get("language") or start.get("language_code") or "ko-KR"
+            sample_rate_hz = int(start.get("sampleRateHz") or start.get("sample_rate_hz") or 16000)
+            device_id_raw  = start.get("deviceId") or start.get("device_id")
+            device_id      = str(device_id_raw).strip() if device_id_raw is not None else None
+            device_id      = device_id or None
+            session_id_raw = start.get("sessionId") or start.get("session_id")
+            session_id     = str(session_id_raw).strip() if session_id_raw is not None else None
+            session_id     = session_id or None
         except (json.JSONDecodeError, ValueError, TypeError) as exc:
             await safe_send({
                 "type": "error", "code": "BAD_REQUEST",
@@ -292,19 +362,32 @@ async def ws_stream(websocket: WebSocket):
                 "trace_id": trace_id,
             })
             return
-        interim_results = bool(start.get("interim_results", True))
-        tts_stream_on  = bool(start.get("tts_stream", True))
+        interim_results = bool(start["interimResults"] if "interimResults" in start else start.get("interim_results", True))
+        tts_stream_on  = bool(start["ttsStream"] if "ttsStream" in start else start.get("tts_stream", True))
         realtime       = bool(start.get("realtime", False))
-        mascot         = normalize_mascot_payload(start.get("mascot"))
+        mascot         = normalize_mascot_payload(start.get("mascot"), start)
+        daily_infos    = normalize_daily_infos_payload(start.get("context"))
+        device_location = normalize_device_location_payload(start.get("deviceLocation") or start.get("device_location"))
+        chat_history   = await load_chat_history(session_id) if session_id else []
+
 
         with ls_trace(
             name="ws_voice_textqa_pipeline",
             run_type="chain",
             metadata={"trace_id": trace_id, "site_id": site_id,
+                      "session_id": session_id,
+                      "device_id": device_id,
+                      "daily_info_count": len(daily_infos),
+                      "has_device_location": bool(device_location),
                       "tts_stream": tts_stream_on, "realtime": realtime},
             inputs={"site_id": site_id, "stt_language": stt_language,
                     "sample_rate_hz": sample_rate_hz, "interim_results": interim_results,
-                    "tts_stream": tts_stream_on, "realtime": realtime, "mascot": mascot},
+                    "tts_stream": tts_stream_on, "realtime": realtime,
+                    "session_id": session_id, "device_id": device_id,
+                    "device_location": device_location,
+                    "daily_info_count": len(daily_infos),
+                    "chat_history_count": len(chat_history),
+                    "mascot": mascot},
         ):
             audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue(maxsize=250)
             timing = {
@@ -412,7 +495,15 @@ async def ws_stream(websocket: WebSocket):
             timing["qa_start_at"] = time.perf_counter()
 
             qa_result = await asyncio.to_thread(
-                traced_ws_text_qa_invoke, query, site_id, last_lang_code, mascot,
+                traced_ws_text_qa_invoke,
+                query,
+                site_id,
+                last_lang_code,
+                mascot,
+                device_id,
+                chat_history,
+                daily_infos,
+                device_location,
             )
             qa_total_ms = ms_delta(timing["qa_start_at"], time.perf_counter())
 

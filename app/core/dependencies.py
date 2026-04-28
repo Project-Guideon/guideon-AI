@@ -39,8 +39,26 @@ def traced_voice_run(audio_bytes: bytes, site_id: int, mascot: dict | None = Non
 
 
 @traceable(name="text_qa_pipeline")
-def traced_text_run(query: str, site_id: int, language_code: str, mascot: dict | None = None):
-    return text_pipeline.run(query=query, site_id=site_id, language_code=language_code, mascot=mascot)
+def traced_text_run(
+    query: str,
+    site_id: int,
+    language_code: str,
+    mascot: dict | None = None,
+    device_id: str | None = None,
+    chat_history: list[dict] | None = None,
+    daily_infos: list[dict] | None = None,
+    device_location: dict | None = None,
+):
+    return text_pipeline.run(
+        query=query,
+        site_id=site_id,
+        language_code=language_code,
+        mascot=mascot,
+        device_id=device_id,
+        chat_history=chat_history,
+        daily_infos=daily_infos,
+        device_location=device_location,
+    )
 
 
 @traceable(name="internal_qa_pipeline")
