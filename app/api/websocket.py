@@ -92,7 +92,7 @@ def normalize_mascot_payload(raw_mascot: object, raw_start: object | None = None
 def normalize_daily_infos_payload(raw_context: object) -> list[dict]:
     if not isinstance(raw_context, dict):
         return []
-    raw_daily_infos = raw_context.get("dailyInfos") or []
+    raw_daily_infos = raw_context.get("dailyInfos") or raw_context.get("daily_infos") or []
     if not isinstance(raw_daily_infos, list):
         return []
 
@@ -392,16 +392,17 @@ async def ws_stream(websocket: WebSocket):
             name="ws_voice_textqa_pipeline",
             run_type="chain",
             metadata={"trace_id": trace_id, "site_id": site_id,
-                      "session_id": session_id,
-                      "device_id": device_id,
+                      "has_session_id": bool(session_id),
+                      "has_device_id": bool(device_id),
                       "daily_info_count": len(daily_infos),
                       "has_device_location": bool(device_location),
                       "tts_stream": tts_stream_on, "realtime": realtime},
             inputs={"site_id": site_id, "stt_language": stt_language,
                     "sample_rate_hz": sample_rate_hz, "interim_results": interim_results,
                     "tts_stream": tts_stream_on, "realtime": realtime,
-                    "session_id": session_id, "device_id": device_id,
-                    "device_location": device_location,
+                    "has_session_id": bool(session_id),
+                    "has_device_id": bool(device_id),
+                    "has_device_location": bool(device_location),
                     "daily_info_count": len(daily_infos),
                     "chat_history_count": len(chat_history),
                     "mascot": mascot},
