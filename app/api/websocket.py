@@ -573,7 +573,9 @@ async def ws_stream(websocket: WebSocket):
                     "type": "final_text", "site_id": site_id,
                     "language_code": last_lang_code, "query": query,
                     "answer": answer_text, "category": qa_category,
-                    "answer_found": qa_answer_found, "trace_id": trace_id,
+                    "answer_found": qa_answer_found,
+                    "response_time_ms": qa_total_ms,
+                    "trace_id": trace_id,
                 })
                 await safe_send({"type": "status", "stage": "graph_stream_done", "trace_id": trace_id})
 
@@ -592,7 +594,9 @@ async def ws_stream(websocket: WebSocket):
                     "type": "final_text", "site_id": site_id,
                     "language_code": last_lang_code, "query": query,
                     "answer": answer_text, "category": qa_category,
-                    "answer_found": qa_answer_found, "trace_id": trace_id,
+                    "answer_found": qa_answer_found,
+                    "response_time_ms": qa_total_ms,
+                    "trace_id": trace_id,
                 })
 
                 qa_first_sentence_ms = None
