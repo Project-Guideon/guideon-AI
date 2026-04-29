@@ -52,6 +52,15 @@ class TextPipeline:
             "language_code": lang2,
             "user_language": lang2,
             "site_id": site_id,
+            "device_id": device_id,
+            "system_prompt": "",
+            "mascot_name": "",
+            "mascot_greeting": "",
+            "mascot_base_persona": "",
+            "mascot_smalltalk_style": "",
+            "mascot_struct_db_style": "",
+            "mascot_RAG_style": "",
+            "mascot_event_style": "",
             "top_k": 5,
             "retry_count": 0,
             "chat_history": chat_history or [],
@@ -64,8 +73,6 @@ class TextPipeline:
             "category": "",
             "trace": {},
         }
-        if device_id:
-            initial_state["device_id"] = device_id
         if mascot:
             initial_state.update(mascot)
         result = self.graph.invoke(initial_state)
