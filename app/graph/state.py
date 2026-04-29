@@ -43,6 +43,7 @@ class GraphState(TypedDict, total=False):
 
     # ── 요청 디바이스 / 마스코트 정보 ────────────────────────────────────
     device_id: str                  # 디바이스 ID (fetch_places_node가 Spring Boot places API 호출 시 사용)
+    device_location: Dict[str, Any]  # optional {latitude, longitude}; currently kept for future use
     system_prompt: str              # 마스코트 캐릭터 프롬프트 (tb_mascot.system_prompt)
     mascot_name: str                # 마스코트 이름 (예: "가온이")
     mascot_greeting: str            # 인사말 (smalltalk 참고용)

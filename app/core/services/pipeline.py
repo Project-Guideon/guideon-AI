@@ -25,6 +25,8 @@ class VoiceQAResult:
 class TextQAResult:
     query: str
     answer: str
+    category: str = "GENERAL"
+    answer_found: bool = False
     contexts: List[Dict[str, Any]] = field(default_factory=list)
     trace: Dict[str, Any] = field(default_factory=dict)
 
@@ -39,6 +41,10 @@ class TextPipeline:
         site_id: int = 1,
         language_code: str = "ko",
         mascot: Dict[str, Any] | None = None,
+        device_id: str | None = None,
+        chat_history: List[Dict[str, Any]] | None = None,
+        daily_infos: List[Dict[str, Any]] | None = None,
+        device_location: Dict[str, Any] | None = None,
     ) -> TextQAResult:
         lang2 = language_code.split("-")[0].lower()  # "ko-KR" → "ko"
         initial_state: Dict[str, Any] = {
@@ -46,8 +52,25 @@ class TextPipeline:
             "language_code": lang2,
             "user_language": lang2,
             "site_id": site_id,
+            "device_id": device_id,
+            "system_prompt": "",
+            "mascot_name": "",
+            "mascot_greeting": "",
+            "mascot_base_persona": "",
+            "mascot_smalltalk_style": "",
+            "mascot_struct_db_style": "",
+            "mascot_RAG_style": "",
+            "mascot_event_style": "",
             "top_k": 5,
             "retry_count": 0,
+            "chat_history": chat_history or [],
+            "nearby_places": [],
+            "daily_infos": daily_infos or [],
+            "device_location": device_location or {},
+            "place_category": None,
+            "place_id": None,
+            "emotion": "",
+            "category": "",
             "trace": {},
         }
         if mascot:
@@ -56,6 +79,8 @@ class TextPipeline:
         return TextQAResult(
             query=query,
             answer=result.get("answer_text", ""),
+            category=result.get("category") or "GENERAL",
+            answer_found=result.get("check_result") == "good",
             contexts=result.get("retrieved_chunks", []),
             trace=result.get("trace", {}),
         )
