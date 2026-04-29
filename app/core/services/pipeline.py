@@ -72,7 +72,7 @@ class TextPipeline:
         return TextQAResult(
             query=query,
             answer=result.get("answer_text", ""),
-            category=result.get("category", "GENERAL"),
+            category=result.get("category") or "GENERAL",
             answer_found=result.get("check_result") == "good",
             contexts=result.get("retrieved_chunks", []),
             trace=result.get("trace", {}),
