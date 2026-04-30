@@ -64,6 +64,6 @@ def make_clarify_node(llm: OpenAILLM):
         trace["_flow"] = flow
         trace["clarify"] = {"user_language": user_language, "clarify_text": clarify_text}
 
-        return {"answer_text": clarify_text, "trace": trace}
+        return {"answer_text": clarify_text, "category": "GENERAL", "trace": trace}
 
     return clarify_node

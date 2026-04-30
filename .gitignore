@@ -32,3 +32,18 @@ google-credentials.json
 doc_1_chunks.txt
 doc_2_chunks.txt
 check_chunk.py
+
+debug_md_dump/
+
+# test/chunk text files
+doc1이전 청킹*.txt
+doc2이전 청킹*.txt
+
+# RAG evaluation results
+app/core/data/results/
+app/core/data/results2/
+app/core/data/results3/
+app/core/data/results4/
+app/core/data/results5/
+app/core/data/results6/
+app/core/data/results7/

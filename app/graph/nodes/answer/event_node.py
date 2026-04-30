@@ -8,16 +8,7 @@ from openai import APIError, APIConnectionError, APITimeoutError, RateLimitError
 
 from app.core.services.llm_openai import OpenAILLM
 from app.graph.state import GraphState
-
-
-_LANG_NAMES = {
-    "ko": "Korean",
-    "en": "English",
-    "zh": "Chinese",
-    "ja": "Japanese",
-    "fr": "French",
-    "es": "Spanish",
-}
+from app.graph.nodes.utils import LANG_NAMES, build_messages, append_trace_flow, build_persona_block, get_language
 
 
 def _serialize_daily_info(idx: int, d: dict[str, Any]) -> dict[str, Any]:
@@ -43,31 +34,17 @@ def _build_event_messages(
     answer_style: str,
 ) -> list[dict[str, str]]:
     candidate_json = json.dumps(candidate_infos, ensure_ascii=False, indent=2)
+    lang_name = LANG_NAMES.get(user_language, user_language.upper())
 
-    lang_name = _LANG_NAMES.get(user_language, user_language.upper())
+    # 마스코트 페르소나 블록 조립 (fallback 없음 — 없으면 빈 문자열로 system 메시지에 포함)
+    character_instruction = build_persona_block(
+        base_prompt=system_prompt_base,
+        style=answer_style,
+        user_language=user_language,
+        lang_name=lang_name,
+        ko_style_label="답변 스타일",
+    )
 
-    character_lines = []
-    if system_prompt_base:
-        if user_language == "ko":
-            character_lines.append(system_prompt_base)
-        else:
-            character_lines.append(
-                f"[Character setting (originally in Korean, for your reference only)]: {system_prompt_base}"
-            )
-    if answer_style:
-        if user_language == "ko":
-            character_lines.append(f"답변 스타일: {answer_style}")
-        else:
-            character_lines.append(
-                f"[Speech style instruction — written in Korean]: {answer_style}\n"
-                f"→ Translate the above Korean style instruction into {lang_name} first, "
-                f"then follow it exactly in {lang_name}. "
-                f"If it says to add a word/phrase at the end of sentences, "
-                f"translate that word/phrase into {lang_name} and add it.\n"
-                f"- CRITICAL: The style MUST be visible in your response.\n"
-                f"- CRITICAL: Do NOT use the original Korean words — always translate them into {lang_name}."
-            )
-    character_instruction = "\n".join(character_lines).strip()
     lang_instruction = (
         "answer는 반드시 한국어로 작성하세요. 2~3문장으로 자연스럽고 음성 안내처럼 답변하세요. "
         "이모지나 특수문자는 사용하지 마세요."
@@ -113,14 +90,11 @@ def _build_event_messages(
 def make_event_node(llm: OpenAILLM):
     def event_node(state: GraphState) -> dict:
         text: str = (state.get("normalized_text") or "").strip()
-        user_language: str = state.get("user_language", "ko")
+        user_language = get_language(state)
         daily_infos: list[dict[str, Any]] = state.get("daily_infos") or []
         site_id: int = state.get("site_id", 1)
 
-        trace = dict(state.get("trace") or {})
-        flow = list(trace.get("_flow") or [])
-        flow.append("event")
-        trace["_flow"] = flow
+        trace = append_trace_flow(state, "event")
 
         if not daily_infos:
             trace["event"] = {
@@ -132,6 +106,7 @@ def make_event_node(llm: OpenAILLM):
             return {
                 "answer_text": "",
                 "check_result": "bad",
+                "category": "OPERATION",
                 "trace": trace,
             }
 
@@ -147,7 +122,9 @@ def make_event_node(llm: OpenAILLM):
             or ""
         )
 
-        messages = _build_event_messages(
+        # _build_event_messages에서 system/user 내용 추출 후
+        # build_messages로 chat_history 포함 통합 조립
+        _msgs = _build_event_messages(
             query=text,
             user_language=user_language,
             now_str=datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -155,6 +132,7 @@ def make_event_node(llm: OpenAILLM):
             system_prompt_base=system_prompt_base,
             answer_style=answer_style,
         )
+        messages = build_messages(state, _msgs[0]["content"], _msgs[1]["content"])
 
         raw = ""
         answer_text = ""
@@ -210,6 +188,7 @@ def make_event_node(llm: OpenAILLM):
         return {
             "answer_text": answer_text,
             "check_result": check_result,
+            "category": "OPERATION",
             "trace": trace,
         }
 

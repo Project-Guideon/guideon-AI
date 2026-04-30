@@ -15,7 +15,8 @@ from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field, ConfigDict
 
-from app.core.dependencies import traced_voice_run, traced_text_run, text_pipeline
+from app.core.dependencies import traced_voice_run, traced_text_run, traced_internal_run
+from app.core.services.chat_history import load_chat_history
 
 router = APIRouter()
 
@@ -94,6 +95,7 @@ async def internal_qa(req: InternalQaRequest):
         "user_language": lang2,
         "site_id": req.siteId,
         "device_id": req.deviceId,
+        "device_location": req.deviceLocation.model_dump() if req.deviceLocation else {},
         "system_prompt": req.systemPrompt or "",
         "mascot_name":            req.mascotName or "",
         "mascot_greeting":        req.greetingMsg or "",
@@ -102,6 +104,7 @@ async def internal_qa(req: InternalQaRequest):
         "mascot_struct_db_style": (req.promptConfig.struct_db_style or "") if req.promptConfig else "",
         "mascot_RAG_style":       (req.promptConfig.RAG_style or "") if req.promptConfig else "",
         "mascot_event_style":     (req.promptConfig.event_node_style or "") if req.promptConfig else "",
+        "chat_history": await load_chat_history(req.sessionId),
         "top_k": 5,
         "retry_count": 0,
         "trace": {},
@@ -114,9 +117,9 @@ async def internal_qa(req: InternalQaRequest):
         "category": "",
     }
 
-    result = await asyncio.to_thread(text_pipeline.graph.invoke, initial_state)
+    result = await asyncio.to_thread(traced_internal_run, initial_state)
 
-    answer = result.get("answer_text", "")
+    answer = (result.get("answer_text") or "").strip()
     answer_found = result.get("check_result") == "good"
 
     fallback_answers = {
@@ -127,9 +130,9 @@ async def internal_qa(req: InternalQaRequest):
     }
 
     return InternalQaResponse(
-        answer=answer if answer_found else fallback_answers.get(lang2, fallback_answers["en"]),
+        answer=answer or fallback_answers.get(lang2, fallback_answers["en"]),
         placeId=result.get("place_id"),
-        emotion=result.get("emotion") or ("GUIDING" if answer_found else "SORRY"),
+        emotion=result.get("emotion") or ("GUIDING" if answer else "SORRY"),
         language=lang2,
         category=result.get("category") or "GENERAL",
         answerFound=answer_found,

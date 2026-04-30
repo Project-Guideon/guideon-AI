@@ -4,6 +4,8 @@ from typing import List
 
 from app.graph.state import GraphState
 
+ALLOWED_FALLBACK_NEXT = {"done", "smalltalk", "event", "struct_db", "retrieve", "clarify"}
+
 
 # ── fallback_dispatch 노드 ────────────────────────────────────────────────────
 
@@ -55,11 +57,13 @@ def fallback_dispatch_node(state: GraphState) -> dict:
 
     next_intent = ranking[next_index]
 
-    # RAG 진입 시 language 분기
+    # RAG 진입 시 언어 무관하게 retrieve로 (번역은 intent_gate에서 처리)
     if next_intent == "rag":
-        fallback_next = "retrieve" if language_code == "ko" else "translate_ko"
-    else:
+        fallback_next = "retrieve"
+    elif next_intent in {"smalltalk", "event", "struct_db"}:
         fallback_next = next_intent
+    else:
+        fallback_next = "clarify"
 
     entry = {
         "action": "fallback",
@@ -88,11 +92,11 @@ def fallback_router(state: GraphState) -> str:
 
     Returns:
         "done"         → tts_builder / END
-        "retrieve"     → RAG (KO)
-        "translate_ko" → RAG (Foreign)
+        "retrieve"     → RAG (언어 무관, 번역은 intent_gate 담당)
         "smalltalk"    → smalltalk 노드
         "event"        → event 노드
         "struct_db"    → struct_db 노드
         "clarify"      → clarify 노드
     """
-    return state.get("fallback_next", "clarify")
+    nxt = state.get("fallback_next", "clarify")
+    return nxt if nxt in ALLOWED_FALLBACK_NEXT else "clarify"

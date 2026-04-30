@@ -5,7 +5,8 @@ from langgraph.graph import StateGraph, END
 from app.core.services.llm_openai import OpenAILLM
 from app.core.services.rag_pgvector import PgVectorRAG
 from app.core.services.rag_pgvector_v2 import PgVectorRAG_V2
-from app.core.services.stt_google import GoogleSTT
+# from app.core.services.stt_google import GoogleSTT # → stt_google_v2로 교체
+from app.core.services.stt_google_v2 import GoogleSTTV2 as GoogleSTT
 from app.core.services.tts_google import GoogleTTS
 
 from app.graph.state import GraphState
@@ -18,7 +19,6 @@ from app.graph.nodes.input.normalize_node import normalize_node
 from app.graph.nodes.classify.intent_gate import make_intent_gate_node
 
 # ── 노드: rag ─────────────────────────────────────────────────────────────────
-from app.graph.nodes.rag.translate_node import make_translate_node
 from app.graph.nodes.rag.retrieve_node import make_retrieve_node
 from app.graph.nodes.rag.retrieve_node_v2 import make_retrieve_node_v2
 from app.graph.nodes.rag.context_pack import context_pack_node
@@ -42,7 +42,6 @@ from app.graph.routers.intent_router import intent_router
 from app.graph.routers.answer_check_router import answer_check_router
 from app.graph.routers.fallback_router import fallback_dispatch_node, fallback_router
 
-
 # ── 공통 노드/엣지 등록 (text_graph, full_graph 공유) ─────────────────────────
 
 def _register_core_nodes(builder: StateGraph, rag: PgVectorRAG, llm: OpenAILLM):
@@ -54,7 +53,6 @@ def _register_core_nodes(builder: StateGraph, rag: PgVectorRAG, llm: OpenAILLM):
 
     builder.add_node("fetch_places",       fetch_places_node)
     builder.add_node("struct_db",          make_struct_db_node(llm))
-    builder.add_node("translate_ko",       make_translate_node(llm))
 
     _retrieve = make_retrieve_node_v2(rag) if isinstance(rag, PgVectorRAG_V2) else make_retrieve_node(rag)
     builder.add_node("retrieve",           _retrieve)
@@ -79,7 +77,6 @@ def _register_core_edges(builder: StateGraph, end_node: str):
     builder.add_edge("struct_db",      "fallback_dispatch")
 
     # ── RAG 파이프라인 고정 구간 ──────────────────────────────────────
-    builder.add_edge("translate_ko",    "retrieve")
     builder.add_edge("retrieve",        "context_pack")
     builder.add_edge("context_pack",    "answer_generate")
     builder.add_edge("answer_generate", "answer_check")
@@ -95,8 +92,7 @@ def _register_core_edges(builder: StateGraph, end_node: str):
             "smalltalk":    "smalltalk",
             "event":        "event",
             "struct_db":    "fetch_places",  # DB 조회 후 struct_db 로
-            "retrieve":     "retrieve",      # RAG (KO)
-            "translate_ko": "translate_ko",  # RAG (Foreign)
+            "retrieve":     "retrieve",      # RAG (KO/Foreign 모두)
         },
     )
 
@@ -120,7 +116,6 @@ def _register_core_edges(builder: StateGraph, end_node: str):
             "event":        "event",
             "struct_db":    "fetch_places",  # fallback 시에도 DB 재조회
             "retrieve":     "retrieve",
-            "translate_ko": "translate_ko",
             "clarify":      "clarify",
         },
     )

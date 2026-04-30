@@ -44,8 +44,13 @@ class OpenAILLM:
         query: str,
         contexts: List[RetrievedChunk],
     ) -> list[dict[str, str]]:
+        def _format_chunk(i: int, c: RetrievedChunk) -> str:
+            title = getattr(c, "section_title", "") or ""
+            header = f"[청크 {i+1}] {title}".strip() if title else f"[청크 {i+1}]"
+            return f"{header}\n{c.content}"
+
         context = "\n\n".join(
-            [f"[청크 {i+1}]\n{c.content}" for i, c in enumerate(contexts)]
+            [_format_chunk(i, c) for i, c in enumerate(contexts)]
         )
 
         system_prompt = (
