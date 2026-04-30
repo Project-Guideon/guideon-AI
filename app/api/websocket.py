@@ -569,11 +569,19 @@ async def ws_stream(websocket: WebSocket):
                     tts_first_audio_latency_ms = ms_delta(timing["qa_start_at"], timing["tts_first_audio_at"])
                     await safe_send({"type": "status", "stage": "tts_done", "trace_id": trace_id})
 
+                # 체감 응답시간 (TTFR) — 발화 종료 → 첫 TTS 오디오 청크
+                # TTS가 비활성/실패면 현재 시점으로 fallback (final_text 도달 시점)
+                response_time_ms = ms_delta(
+                    timing["stop_received_at"],
+                    timing["tts_first_audio_at"] or time.perf_counter(),
+                )
                 await safe_send({
                     "type": "final_text", "site_id": site_id,
                     "language_code": last_lang_code, "query": query,
                     "answer": answer_text, "category": qa_category,
-                    "answer_found": qa_answer_found, "trace_id": trace_id,
+                    "answer_found": qa_answer_found,
+                    "response_time_ms": response_time_ms,
+                    "trace_id": trace_id,
                 })
                 await safe_send({"type": "status", "stage": "graph_stream_done", "trace_id": trace_id})
 
@@ -588,11 +596,14 @@ async def ws_stream(websocket: WebSocket):
                 )
 
             else:
+                response_time_ms = ms_delta(timing["stop_received_at"], time.perf_counter())
                 await safe_send({
                     "type": "final_text", "site_id": site_id,
                     "language_code": last_lang_code, "query": query,
                     "answer": answer_text, "category": qa_category,
-                    "answer_found": qa_answer_found, "trace_id": trace_id,
+                    "answer_found": qa_answer_found,
+                    "response_time_ms": response_time_ms,
+                    "trace_id": trace_id,
                 })
 
                 qa_first_sentence_ms = None
