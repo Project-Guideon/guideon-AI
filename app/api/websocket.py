@@ -142,6 +142,8 @@ def extract_answer_found(result, category: str, answer_text: str) -> bool:
         value = result.get("answer_found")
         if value is None:
             value = result.get("answerFound")
+        if value is None and result.get("check_result") is not None:
+            return result.get("check_result") == "good"
     elif result is not None:
         value = getattr(result, "answer_found", None)
         if value is None:
@@ -150,7 +152,7 @@ def extract_answer_found(result, category: str, answer_text: str) -> bool:
     if value is not None:
         return bool(value)
 
-    return bool((answer_text or "").strip()) and (category or "").upper() != "ERROR"
+    return False
 
 
 @traceable(name="emit_latency_summary", run_type="tool")
