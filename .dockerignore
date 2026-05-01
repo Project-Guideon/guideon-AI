@@ -1,0 +1,13 @@
+.guideon_AI/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.*
+.git/
+*.log
+*.mp3
+*.wav
+google_key.json
+google-credentials.json
