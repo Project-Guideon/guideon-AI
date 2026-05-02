@@ -18,6 +18,9 @@ _INTERNAL_TOKEN = os.getenv("INTERNAL_API_TOKEN", "")
 
 # storage_url 허용 호스트 (SSRF 방지)
 _ALLOWED_STORAGE_HOSTS = {"admin-bff", "host.docker.internal", "localhost"}
+_extra = os.getenv("ALLOWED_STORAGE_HOSTS", "")
+if _extra:
+    _ALLOWED_STORAGE_HOSTS |= {h.strip() for h in _extra.split(",") if h.strip()}
 
 
 class ProcessDocumentRequest(BaseModel):
