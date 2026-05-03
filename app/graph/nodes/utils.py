@@ -36,11 +36,11 @@ def build_messages(state: GraphState, system_content: str, user_content: str) ->
 
 
 def get_language(state: GraphState) -> str:
-    """state에서 user_language를 안전하게 추출.
+    """state에서 실제 감지 언어를 안전하게 추출.
 
-    None이거나 빈 문자열이면 "ko" 반환.
+    detected_language_code(STT 감지 결과) 우선, 없으면 user_language, 그것도 없으면 "ko".
     """
-    lang = state.get("user_language", "ko")
+    lang = state.get("detected_language_code") or state.get("user_language", "ko")
     return lang if isinstance(lang, str) and lang else "ko"
 
 

@@ -48,6 +48,7 @@ class TextPipeline:
         initial_state: Dict[str, Any] = {
             "transcript": query,        # STT 결과 대신 텍스트를 직접 주입
             "language_code": lang2,
+            "detected_language_code": lang2,
             "user_language": lang2,
             "site_id": site_id,
             "device_id": device_id,

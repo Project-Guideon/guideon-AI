@@ -33,7 +33,7 @@ class GoogleTTS:
         voice_name: Optional[str] = None,
     ) -> bytes:
         if not text or not text.strip():
-            text = "음성으로 변환할 내용이 없습니다."
+            return b""
 
         lang = language_code or self.config.language_code
         vname = voice_name or self.config.voice_name

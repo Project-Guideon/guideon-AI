@@ -51,8 +51,14 @@ class GoogleSTTV2:
         "ko-KR": "ko", "ko-kr": "ko", "ko": "ko",
         "en-US": "en", "en-us": "en", "en-GB": "en", "en-gb": "en", "en": "en",
         "cmn-Hans-CN": "zh", "cmn-hans-cn": "zh",
+        "zh-CN": "zh", "zh-cn": "zh", "zh-TW": "zh", "zh-tw": "zh", "zh": "zh",
         "ja-JP": "ja", "ja-jp": "ja", "ja": "ja",
     }
+
+    # 기본 언어. 항상 STT 후보 1순위로 유지.
+    BASE_LANGUAGE_CODE = "ko-KR"
+    # STT가 감지할 수 있는 전체 후보 언어 목록
+    CANDIDATE_LANGUAGE_CODES = ["ko-KR", "en-US", "ja-JP", "cmn-Hans-CN"]
 
     _MULTI_LANGUAGE_ALLOWED_LOCATIONS = {"global", "us", "eu"}
     
@@ -129,7 +135,8 @@ class GoogleSTTV2:
         """
         chirp_3 미지원 언어/제약 처리:
         - 주 언어가 미지원(zh 등) → long 모델 + 단일 언어
-        - chirp_3 streaming 은 단일 언어만 허용 → 주 언어 하나만 전달
+        - 주 언어가 지원되는 경우 → 후보 목록에서 미지원 언어 제거
+          (Chinese/cmn-Hans-CN 은 chirp_3 다중 언어 모드 미지원)
         """
         if self.config.model != "chirp_3" or not lang_codes:
             return self.config.model, lang_codes
@@ -137,8 +144,9 @@ class GoogleSTTV2:
         if lang_codes[0] in self._CHIRP3_UNSUPPORTED:
             return "long", [lang_codes[0]]
 
-        # chirp_3 는 streaming/batch 모두 단일 language_code만 허용
-        return self.config.model, [lang_codes[0]]
+        # primary 언어가 지원되는 경우, 후보에서 chirp_3 미지원 언어 제거
+        filtered = [l for l in lang_codes if l not in self._CHIRP3_UNSUPPORTED]
+        return self.config.model, filtered if filtered else [self.BASE_LANGUAGE_CODE]
 
     def _build_recognition_config(
         self,

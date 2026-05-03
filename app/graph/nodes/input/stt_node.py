@@ -26,6 +26,7 @@ def make_stt_node(stt: GoogleSTT):
         return {
             "transcript": result.transcript,
             "language_code": result.language_code,
+            "detected_language_code": result.language_code,
             "user_language": result.language_code,  # 원언어 보존 (끝까지 유지)
             "trace": trace,
         }

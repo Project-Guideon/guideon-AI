@@ -13,6 +13,7 @@ class GraphState(TypedDict, total=False):
     # ── STT 출력 ──────────────────────────────────────────────────────────
     transcript: str            # STT 변환 텍스트
     language_code: str         # 감지 언어 2자리: "ko" | "en" | "zh" | "ja" 등
+    detected_language_code: str  # STT가 실제 감지한 언어 코드 (answer 노드 언어 결정에 사용)
     user_language: str         # 원언어 보존 (language_code 와 동일값; 끝까지 유지)
 
     # ── 정규화 ────────────────────────────────────────────────────────────
