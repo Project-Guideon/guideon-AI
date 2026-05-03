@@ -4,30 +4,14 @@
 테스트 단계에서 PDF를 로드하기 위해 필요한 tb_site 데이터를 생성합니다.
 """
 
-import os
-from dotenv import load_dotenv
-import psycopg
-
-load_dotenv()
+from app.core.DB.connect_db import get_conn
 
 def init_test_data():
     """테스트용 기본 데이터 초기화"""
-    
-    host = os.getenv("POSTGRES_HOST", "localhost")
-    port = int(os.getenv("POSTGRES_PORT", 5432))
-    dbname = os.getenv("POSTGRES_DB", "guideon_db")
-    user = os.getenv("POSTGRES_USER", "postgres")
-    password = os.getenv("POSTGRES_PASSWORD")
-    
-    print(f"🔌 연결 중: {host}:{port}/{dbname} (user={user})")
-    
-    conn = psycopg.connect(
-        host=host,
-        port=port,
-        dbname=dbname,
-        user=user,
-        password=password,
-    )
+
+    print("🔌 DB 연결 중...")
+
+    conn = get_conn()
     
     print("✅ DB 연결 성공")
     
