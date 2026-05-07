@@ -7,12 +7,21 @@ import base64
 import time
 from pathlib import Path
 
+
 WS_URL = "ws://localhost:8082/ws/v1/kiosk/stt?sessionId=b5e95ed7-aac2-483b-aa03-71b3b66fa5d6&siteId=5&languageCode=ko-KR&token=kiosk-south-01-test"
 # 스크립트 위치 기준 상대 경로로 고정 (실행 디렉터리와 무관)
-WAV_PATH = Path(__file__).parent.parent.parent / "wav" / "ko_04.wav"
+#WS_URL = "ws://localhost:8000/ws/stream"
+WAV_PATH = "wav/ch_현우.wav"
 
-CHUNK_MS = 50
+
+CHUNK_MS = 400
 SAVE_TTS_AUDIO = True
+
+START_PAYLOAD = {
+    "type": "start",
+    "siteId": 2,
+    "language_code": "auto",
+}
 
 
 def to_pcm16_mono_16k(wav_path: str):
@@ -38,8 +47,6 @@ async def main():
     chunk_size = bytes_per_ms * CHUNK_MS
 
     async with websockets.connect(WS_URL, max_size=20_000_000) as ws:
-
-        t0 = time.perf_counter()
 
         t_stt_final = None
         t_llm_first = None
@@ -94,6 +101,9 @@ async def main():
                 else:
                     print("[recv]", data)
 
+        await ws.send(json.dumps(START_PAYLOAD))
+        t0 = time.perf_counter()
+
         recv_task = asyncio.create_task(receiver())
 
         for i in range(0, len(pcm_bytes), chunk_size):
@@ -109,10 +119,10 @@ async def main():
         if t_stt_final:
             print("STT latency:", round((t_stt_final - t0) * 1000), "ms")
 
-        if t_llm_first:
+        if t_llm_first and t_stt_final:
             print("LLM first token:", round((t_llm_first - t_stt_final) * 1000), "ms")
 
-        if t_tts_first:
+        if t_tts_first and t_llm_first:
             print("TTS first audio:", round((t_tts_first - t_llm_first) * 1000), "ms")
 
         if SAVE_TTS_AUDIO and tts_audio:

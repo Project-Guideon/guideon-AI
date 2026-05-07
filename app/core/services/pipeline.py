@@ -24,6 +24,7 @@ class TextQAResult:
     query: str
     answer: str
     category: str = "GENERAL"
+    answer_language: str = "ko"
     answer_found: bool = False
     contexts: List[Dict[str, Any]] = field(default_factory=list)
     trace: Dict[str, Any] = field(default_factory=dict)
@@ -37,19 +38,32 @@ class TextPipeline:
         self,
         query: str,
         site_id: int = 1,
-        language_code: str = "ko",
+        language_code: str = "ko",       # 하위 호환용; user_language가 우선
+        user_language: str | None = None,
+        answer_language: str | None = None,
+        stt_language_code: str | None = None,
         mascot: Dict[str, Any] | None = None,
         device_id: str | None = None,
         chat_history: List[Dict[str, Any]] | None = None,
         daily_infos: List[Dict[str, Any]] | None = None,
         device_location: Dict[str, Any] | None = None,
     ) -> TextQAResult:
-        lang2 = language_code.split("-")[0].lower()  # "ko-KR" → "ko"
+        lang2 = (user_language or language_code or "ko").split("-")[0].lower()
+        ans_lang = (answer_language or lang2)
+        stt_lang = stt_language_code or f"{lang2}-KR"  # 미지정 시 rough default
+
         initial_state: Dict[str, Any] = {
+<<<<<<< HEAD
             "transcript": query,        # STT 결과 대신 텍스트를 직접 주입
             "language_code": lang2,
             "detected_language_code": lang2,
+=======
+            "transcript": query,
+            "language_code": lang2,          # 하위 호환
+            "stt_language_code": stt_lang,
+>>>>>>> 65f97c2 (lang code 관련 수정중 (#149))
             "user_language": lang2,
+            "answer_language": ans_lang,
             "site_id": site_id,
             "device_id": device_id,
             "system_prompt": "",
@@ -79,6 +93,7 @@ class TextPipeline:
             query=query,
             answer=result.get("answer_text", ""),
             category=result.get("category") or "GENERAL",
+            answer_language=result.get("answer_language") or result.get("user_language") or lang2,
             answer_found=result.get("check_result") == "good",
             contexts=result.get("retrieved_chunks", []),
             trace=result.get("trace", {}),

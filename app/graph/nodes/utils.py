@@ -44,6 +44,12 @@ def get_language(state: GraphState) -> str:
     return lang if isinstance(lang, str) and lang else "ko"
 
 
+def get_answer_language(state: GraphState) -> str:
+    """답변 생성 언어 추출. answer_language → user_language → "ko" 순으로 fallback."""
+    lang = state.get("answer_language") or state.get("user_language", "ko")
+    return lang if isinstance(lang, str) and lang else "ko"
+
+
 def append_trace_flow(state: GraphState, node_name: str) -> dict:
     """trace dict에 node_name을 _flow에 추가하여 반환.
 

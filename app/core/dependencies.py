@@ -17,8 +17,13 @@ from app.core.services.pipeline import VoicePipeline, TextPipeline
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
+<<<<<<< HEAD
 stt = GoogleSTT(STTConfig(language_codes=["ko-KR", "en-US", "ja-JP", "cmn-Hans-CN"], sample_rate_hz=16000))
 tts = GoogleTTS(TTSConfig())
+=======
+stt = GoogleSTT(STTConfig(language_codes=["ko-KR", "en-US", "ja-JP"], sample_rate_hz=16000))
+tts = GoogleTTS(TTSConfig(language_code="ko-KR"))
+>>>>>>> 65f97c2 (lang code 관련 수정중 (#149))
 embedder = OpenAIEmbedder(client=client, model="text-embedding-3-small")
 
 RAG_VERSION = os.getenv("RAG_VERSION", "v1")
@@ -41,7 +46,9 @@ def traced_voice_run(audio_bytes: bytes, site_id: int, mascot: dict | None = Non
 def traced_text_run(
     query: str,
     site_id: int,
-    language_code: str,
+    user_language: str = "ko",
+    answer_language: str = "ko",
+    stt_language_code: str = "ko-KR",
     mascot: dict | None = None,
     device_id: str | None = None,
     chat_history: list[dict] | None = None,
@@ -51,7 +58,9 @@ def traced_text_run(
     return text_pipeline.run(
         query=query,
         site_id=site_id,
-        language_code=language_code,
+        user_language=user_language,
+        answer_language=answer_language,
+        stt_language_code=stt_language_code,
         mascot=mascot,
         device_id=device_id,
         chat_history=chat_history,
