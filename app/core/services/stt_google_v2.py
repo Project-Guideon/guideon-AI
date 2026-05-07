@@ -39,6 +39,7 @@ class STTConfig:
     project_id: str = field(default_factory=lambda: os.environ.get("GOOGLE_PROJECT_ID", ""))
     location: str = field(default_factory=lambda: os.environ.get("GOOGLE_CLOUD_REGION", "us"))
     model: str = field(default_factory=lambda: os.environ.get("GOOGLE_STT_MODEL", "chirp_3"))
+    default_speech_phrases: List[str] = field(default_factory=list)
 
 
 
@@ -131,11 +132,8 @@ class GoogleSTTV2:
         """
         chirp_3 미지원 언어/제약 처리:
         - 주 언어가 미지원(zh 등) → long 모델 + 단일 언어
-<<<<<<< HEAD
         - 주 언어가 지원되는 경우 → 후보 목록에서 미지원 언어 제거
           (Chinese/cmn-Hans-CN 은 chirp_3 다중 언어 모드 미지원)
-=======
->>>>>>> 65f97c2 (lang code 관련 수정중 (#149))
         """
         if self.config.model != "chirp_3" or not lang_codes:
             return self.config.model, lang_codes
@@ -143,13 +141,9 @@ class GoogleSTTV2:
         if lang_codes[0] in self._CHIRP3_UNSUPPORTED:
             return "long", [lang_codes[0]]
 
-<<<<<<< HEAD
         # primary 언어가 지원되는 경우, 후보에서 chirp_3 미지원 언어 제거
         filtered = [l for l in lang_codes if l not in self._CHIRP3_UNSUPPORTED]
         return self.config.model, filtered if filtered else [self.BASE_LANGUAGE_CODE]
-=======
-        return self.config.model, [lang_codes[0]]
->>>>>>> 65f97c2 (lang code 관련 수정중 (#149))
 
     def _build_recognition_config(
         self,
@@ -177,7 +171,7 @@ class GoogleSTTV2:
         )
 
         # Chirp 계열은 adaptation 미지원 → 비-Chirp 모델에서만 phrase boost
-        is_chirp = self.config.model.startswith("chirp")
+        is_chirp = model.startswith("chirp")
         if not is_chirp:
             all_phrases = list(self.config.default_speech_phrases)
             if speech_phrases:

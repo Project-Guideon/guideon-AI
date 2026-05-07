@@ -55,7 +55,10 @@ def split_sentences(text: str) -> list[str]:
     text = (text or "").strip()
     if not text:
         return []
-    parts = re.split(r"(?<=[.!?])\s+|(?<=다\.)\s*|(?<=요\.)\s*|(?<=니다\.)\s*", text)
+    parts = re.split(
+        r"(?<=[.!?])\s+|(?<=[。！？])|(?<=다\.)\s*|(?<=요\.)\s*|(?<=니다\.)\s*",
+        text,
+    )
     return [p.strip() for p in parts if p and p.strip()]
 
 

@@ -4,11 +4,12 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 from app.core.services.llm_openai import OpenAILLM
 from app.core.services.rag_pgvector import PgVectorRAG
-# from app.core.services.stt_google import GoogleSTT
 from app.core.services.stt_google_v2 import GoogleSTTV2 as GoogleSTT
 from app.core.services.tts_google import GoogleTTS
 from app.graph.graph_builder import build_graph, build_text_graph
 from app.core.services.rag_pgvector import OpenAIEmbedder
+from app.core.language_profiles import get_profile
+
 
 @dataclass
 class VoiceQAResult:
@@ -53,15 +54,9 @@ class TextPipeline:
         stt_lang = stt_language_code or f"{lang2}-KR"  # 미지정 시 rough default
 
         initial_state: Dict[str, Any] = {
-<<<<<<< HEAD
-            "transcript": query,        # STT 결과 대신 텍스트를 직접 주입
-            "language_code": lang2,
-            "detected_language_code": lang2,
-=======
             "transcript": query,
-            "language_code": lang2,          # 하위 호환
+            "language_code": lang2,
             "stt_language_code": stt_lang,
->>>>>>> 65f97c2 (lang code 관련 수정중 (#149))
             "user_language": lang2,
             "answer_language": ans_lang,
             "site_id": site_id,
@@ -102,19 +97,23 @@ class TextPipeline:
 
 class VoicePipeline:
     def __init__(self, stt: GoogleSTT, rag: PgVectorRAG, llm: OpenAILLM, tts: GoogleTTS):
-        # 서비스를 직접 보관하는 대신 LangGraph 그래프로 조립
         self.graph = build_graph(stt=stt, rag=rag, llm=llm, tts=tts)
 
     def run(
         self,
         audio_bytes: bytes,
         site_id: int = 1,
+        language_code: str = "ko",
         mascot: Dict[str, Any] | None = None,
     ) -> VoiceQAResult:
-        # top_k / retry_count 는 그래프 내부(answer_check)에서 동적으로 관리
+        profile = get_profile(language_code)
+
         initial_state: Dict[str, Any] = {
             "audio": audio_bytes,
             "site_id": site_id,
+            "stt_language_code": profile.stt_language_code,
+            "user_language": profile.user_language,
+            "answer_language": profile.answer_language,
             "top_k": 5,
             "retry_count": 0,
             "trace": {},
@@ -131,4 +130,3 @@ class VoicePipeline:
             contexts=result.get("retrieved_chunks", []),
             trace=result.get("trace", {}),
         )
-

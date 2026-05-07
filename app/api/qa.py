@@ -149,7 +149,7 @@ async def internal_qa(req: InternalQaRequest):
 async def voice_qa(
     audio: UploadFile = File(...),
     site_id: int = Form(1),
-    # 테스트용 mascot 필드 (internal/v1/qa와 동일한 구조, Form으로 전달)
+    language: Optional[str] = Form("ko"),
     system_prompt: Optional[str] = Form(None),
     mascot_name: Optional[str] = Form(None),
     mascot_greeting: Optional[str] = Form(None),
@@ -172,7 +172,7 @@ async def voice_qa(
             event_node_style=mascot_event_style,
         ),
     )
-    result = await asyncio.to_thread(traced_voice_run, audio_bytes, site_id, mascot)
+    result = await asyncio.to_thread(traced_voice_run, audio_bytes, site_id, language or "ko", mascot)
     return Response(
         content=result.voice_bytes,
         media_type="audio/mpeg",
