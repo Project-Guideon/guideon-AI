@@ -2,8 +2,8 @@ import sounddevice as sd
 import soundfile as sf
 
 SAMPLE_RATE = 16000   # Google STT 필수 설정
-DURATION    = 5       # 초 (원하는 만큼 변경)
-FILENAME    = "영어1.wav"
+DURATION    = 8      # 초 (원하는 만큼 변경)
+FILENAME    = "중국어2.wav"
 
 print(f"녹음 시작... ({DURATION}초)")
 audio = sd.rec(int(DURATION * SAMPLE_RATE),
