@@ -5,13 +5,12 @@ import soundfile as sf
 import websockets
 import base64
 import time
-from pathlib import Path
 
 
 #WS_URL = "ws://localhost:8082/ws/v1/kiosk/stt?sessionId=b5e95ed7-aac2-483b-aa03-71b3b66fa5d6&siteId=5&languageCode=ko-KR&token=kiosk-south-01-test"
 # 스크립트 위치 기준 상대 경로로 고정 (실행 디렉터리와 무관)
 WS_URL = "ws://localhost:8000/ws/stream"
-WAV_PATH = "wav/ch_현우.wav"
+WAV_PATH = "wav/jp_01.wav"
 
 
 CHUNK_MS = 400
@@ -20,7 +19,7 @@ SAVE_TTS_AUDIO = True
 START_PAYLOAD = {
     "type": "start",
     "siteId": 2,
-    "language_code": "auto",
+    "language_code": "ja-JP",
 }
 
 
