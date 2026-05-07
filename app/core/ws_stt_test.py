@@ -10,7 +10,7 @@ import time
 #WS_URL = "ws://localhost:8082/ws/v1/kiosk/stt?sessionId=b5e95ed7-aac2-483b-aa03-71b3b66fa5d6&siteId=5&languageCode=ko-KR&token=kiosk-south-01-test"
 # 스크립트 위치 기준 상대 경로로 고정 (실행 디렉터리와 무관)
 WS_URL = "ws://localhost:8000/ws/stream"
-WAV_PATH = "wav/jp_01.wav"
+WAV_PATH = r"중국어 testcase1 -all 중국어 버젼2.wav"
 
 
 CHUNK_MS = 400
@@ -18,8 +18,8 @@ SAVE_TTS_AUDIO = True
 
 START_PAYLOAD = {
     "type": "start",
-    "siteId": 2,
-    "language_code": "ja-JP",
+    "siteId": 3,
+    "language_code": "auto",
 }
 
 
@@ -63,21 +63,24 @@ async def main():
 
                 if t in ("stt_interim", "stt_final"):
 
-                    print(f"[{t}] {data.get('text')}")
+                    lang = data.get("language_code", "?")
+                    print(f"[{t}] lang={lang} | {data.get('text')}")
 
                     if t == "stt_final" and t_stt_final is None:
                         t_stt_final = time.perf_counter()
 
                 elif t == "llm_sentence":
 
-                    print("[LLM]", data.get("text"))
+                    lang = data.get("language_code", "?")
+                    print(f"[LLM] lang={lang} | {data.get('text')}")
 
                     if t_llm_first is None:
                         t_llm_first = time.perf_counter()
 
                 elif t == "tts_chunk":
 
-                    print("[TTS]", data.get("text"))
+                    lang = data.get("language_code", "?")
+                    print(f"[TTS] lang={lang} | {data.get('text')}")
 
                     if t_tts_first is None:
                         t_tts_first = time.perf_counter()
@@ -89,6 +92,7 @@ async def main():
                 elif t == "final_text":
 
                     print("\n[FINAL ANSWER]")
+                    print("lang    :", data.get("language_code", "?"))
                     print("answer  :", data.get("answer"))
                     print("category:", data.get("category"))
 

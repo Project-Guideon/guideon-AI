@@ -495,6 +495,15 @@ async def ws_stream(websocket: WebSocket):
 
             timing["stt_final_at"] = time.perf_counter()
 
+            # STT 실제 감지 언어로 profile 갱신 (클라이언트 start 언어보다 우선)
+            _detected       = get_profile(last_lang_code)
+            user_language   = _detected.user_language
+            answer_language = _detected.answer_language
+            logger.info(
+                "lang_detect trace_id=%s | client=%s → stt_detected=%s → user_language=%s answer_language=%s",
+                trace_id, _client_lang, last_lang_code, user_language, answer_language,
+            )
+
             # recv_task 완료 대기 (audio_receiver가 None을 넣은 뒤 종료)
             if recv_task and not recv_task.done():
                 try:
