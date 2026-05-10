@@ -88,7 +88,7 @@ def make_intent_gate_node(llm: OpenAILLM):
                     '"ranking": ["rag", "struct_db", "smalltalk", "event"], "place_category": null, '
                     '"retrieval_query_ko": "경복궁 관람 시간"}\n'
                     "\n"
-                    "actual_language: ISO 639-1 code — ko, en, or ja.\n"
+                    "actual_language: ISO 639-1 code — ko, en, ja, or zh.\n"
                     "The first item in ranking is the most likely intent. Include all 4 categories.\n"
                     "place_category: set ONLY when top intent is struct_db, otherwise null.\n"
                     "  Possible values: TOILET, TICKET, RESTAURANT, SHOP, INFO, ATTRACTION, PARKING, OTHER\n"
