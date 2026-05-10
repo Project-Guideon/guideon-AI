@@ -51,7 +51,7 @@ class TextPipeline:
     ) -> TextQAResult:
         lang2 = (user_language or language_code or "ko").split("-")[0].lower()
         ans_lang = (answer_language or lang2)
-        stt_lang = stt_language_code or f"{lang2}-KR"  # 미지정 시 rough default
+        stt_lang = stt_language_code or get_profile(lang2).stt_language_code
 
         initial_state: Dict[str, Any] = {
             "transcript": query,
