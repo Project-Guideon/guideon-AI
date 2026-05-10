@@ -39,11 +39,8 @@ class STTConfig:
     project_id: str = field(default_factory=lambda: os.environ.get("GOOGLE_PROJECT_ID", ""))
     location: str = field(default_factory=lambda: os.environ.get("GOOGLE_CLOUD_REGION", "us"))
     model: str = field(default_factory=lambda: os.environ.get("GOOGLE_STT_MODEL", "chirp_3"))
+    default_speech_phrases: List[str] = field(default_factory=list)
 
-    default_speech_phrases: List[str] = field(default_factory=lambda: [
-        "근정전", "사정전", "경복궁", "창덕궁", "창경궁", "덕수궁", "경회루",
-        "향원정", "교태전", "강녕전", "집옥재", "자경전", "흥례문", "광화문",
-    ])
 
 
 class GoogleSTTV2:
@@ -51,8 +48,14 @@ class GoogleSTTV2:
         "ko-KR": "ko", "ko-kr": "ko", "ko": "ko",
         "en-US": "en", "en-us": "en", "en-GB": "en", "en-gb": "en", "en": "en",
         "cmn-Hans-CN": "zh", "cmn-hans-cn": "zh",
+        "zh-CN": "zh", "zh-cn": "zh", "zh-TW": "zh", "zh-tw": "zh", "zh": "zh",
         "ja-JP": "ja", "ja-jp": "ja", "ja": "ja",
     }
+
+    # 기본 언어. 항상 STT 후보 1순위로 유지.
+    BASE_LANGUAGE_CODE = "ko-KR"
+    # STT가 감지할 수 있는 전체 후보 언어 목록
+    CANDIDATE_LANGUAGE_CODES = ["ko-KR", "en-US", "ja-JP"]
 
     _MULTI_LANGUAGE_ALLOWED_LOCATIONS = {"global", "us", "eu"}
     
@@ -129,7 +132,7 @@ class GoogleSTTV2:
         """
         chirp_3 미지원 언어/제약 처리:
         - 주 언어가 미지원(zh 등) → long 모델 + 단일 언어
-        - chirp_3 streaming 은 단일 언어만 허용 → 주 언어 하나만 전달
+        - chirp_3 streaming은 language_codes를 1개만 허용 → 항상 단일 언어
         """
         if self.config.model != "chirp_3" or not lang_codes:
             return self.config.model, lang_codes
@@ -137,7 +140,6 @@ class GoogleSTTV2:
         if lang_codes[0] in self._CHIRP3_UNSUPPORTED:
             return "long", [lang_codes[0]]
 
-        # chirp_3 는 streaming/batch 모두 단일 language_code만 허용
         return self.config.model, [lang_codes[0]]
 
     def _build_recognition_config(
@@ -166,7 +168,7 @@ class GoogleSTTV2:
         )
 
         # Chirp 계열은 adaptation 미지원 → 비-Chirp 모델에서만 phrase boost
-        is_chirp = self.config.model.startswith("chirp")
+        is_chirp = model.startswith("chirp")
         if not is_chirp:
             all_phrases = list(self.config.default_speech_phrases)
             if speech_phrases:

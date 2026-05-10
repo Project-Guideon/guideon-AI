@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-# from app.core.services.stt_google import GoogleSTT
 from app.core.services.stt_google_v2 import GoogleSTTV2 as GoogleSTT
 from app.graph.state import GraphState
 
@@ -10,8 +9,9 @@ def make_stt_node(stt: GoogleSTT):
 
     def stt_node(state: GraphState) -> dict:
         audio: bytes = state.get("audio", b"")
+        primary_language = state.get("stt_language_code") or None
 
-        result = stt.transcribe(audio)
+        result = stt.transcribe(audio, primary_language=primary_language)
 
         trace = dict(state.get("trace") or {})
         flow = list(trace.get("_flow") or [])
@@ -19,14 +19,15 @@ def make_stt_node(stt: GoogleSTT):
         trace["_flow"] = flow
         trace["stt"] = {
             "transcript": result.transcript,
-            "language_code": result.language_code,
+            "stt_detected_language": result.language_code,  # STT 모델이 감지한 언어 (참고용)
+            "stt_language_code": state.get("stt_language_code", ""),
             "confidence": result.confidence,
         }
 
         return {
             "transcript": result.transcript,
-            "language_code": result.language_code,
-            "user_language": result.language_code,  # 원언어 보존 (끝까지 유지)
+            "language_code": result.language_code,  # STT 감지 언어 (참고용)
+            # user_language / answer_language 는 LanguageProfile에서 설정된 값을 유지
             "trace": trace,
         }
 

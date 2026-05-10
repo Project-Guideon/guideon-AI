@@ -83,7 +83,11 @@ async def internal_qa(req: InternalQaRequest):
     - smalltalk  : LLM 직접 일상 대화 답변
     - QaResponse 형식으로 반환
     """
-    lang2 = (req.language or "ko").split("-")[0].lower()
+    from app.core.language_profiles import get_profile as _get_profile
+    _profile    = _get_profile(req.language or "ko")
+    lang2       = _profile.user_language
+    ans_lang    = _profile.answer_language
+    stt_lang    = _profile.stt_language_code
 
     daily_infos = []
     if req.context:
@@ -92,7 +96,9 @@ async def internal_qa(req: InternalQaRequest):
     initial_state = {
         "transcript": req.question,
         "language_code": lang2,
+        "stt_language_code": stt_lang,
         "user_language": lang2,
+        "answer_language": ans_lang,
         "site_id": req.siteId,
         "device_id": req.deviceId,
         "device_location": req.deviceLocation.model_dump() if req.deviceLocation else {},
@@ -143,7 +149,7 @@ async def internal_qa(req: InternalQaRequest):
 async def voice_qa(
     audio: UploadFile = File(...),
     site_id: int = Form(1),
-    # 테스트용 mascot 필드 (internal/v1/qa와 동일한 구조, Form으로 전달)
+    language: Optional[str] = Form("ko"),
     system_prompt: Optional[str] = Form(None),
     mascot_name: Optional[str] = Form(None),
     mascot_greeting: Optional[str] = Form(None),
@@ -166,7 +172,7 @@ async def voice_qa(
             event_node_style=mascot_event_style,
         ),
     )
-    result = await asyncio.to_thread(traced_voice_run, audio_bytes, site_id, mascot)
+    result = await asyncio.to_thread(traced_voice_run, audio_bytes, site_id, language or "ko", mascot)
     return Response(
         content=result.voice_bytes,
         media_type="audio/mpeg",
