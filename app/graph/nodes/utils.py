@@ -40,7 +40,7 @@ def get_language(state: GraphState) -> str:
 
     detected_language_code(STT 감지 결과) 우선, 없으면 user_language, 그것도 없으면 "ko".
     """
-    lang = state.get("detected_language_code") or state.get("user_language", "ko")
+    lang = state.get("language_code") or state.get("user_language", "ko")
     return lang if isinstance(lang, str) and lang else "ko"
 
 
