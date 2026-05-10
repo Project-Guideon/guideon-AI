@@ -18,7 +18,7 @@ from app.core.services.pipeline import VoicePipeline, TextPipeline
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
-stt = GoogleSTT(STTConfig(language_codes=["ko-KR", "en-US", "ja-JP"], sample_rate_hz=16000))
+stt = GoogleSTT(STTConfig(language_codes=["ko-KR", "en-US", "ja-JP","cmn-Hans-CN"], sample_rate_hz=16000))
 tts = GoogleTTS(TTSConfig(language_code="ko-KR"))
 
 embedder = OpenAIEmbedder(client=client, model="text-embedding-3-small")

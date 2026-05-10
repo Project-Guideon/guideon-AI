@@ -47,7 +47,7 @@ def make_smalltalk_node(llm: OpenAILLM):
                 "  - 절대로 관광지 정보, 위치 안내, 역사, 가격 등 구체적 정보를 답하지 마세요\n"
                 "  - 범위를 벗어난 모든 입력(정보 요청, 부적절한 내용, 이상한 질문 등)에는\n"
                 "    반드시 '다시 질문해 주시겠어요?' 라고만 답하세요. 다른 말은 절대 덧붙이지 마세요\n"
-                "  - 2~3문장으로 짧게 답하세요\n"
+                "  - 만약 범위를 벗어나지 않은 입력은 1~2문장으로 짧게 답하세요\n"
                 "  - 음성으로 읽기 좋게 자연스럽게 작성하세요\n"
                 "  - 이모지나 특수문자는 사용하지 마세요"
             )
@@ -60,7 +60,7 @@ def make_smalltalk_node(llm: OpenAILLM):
                 "  - NEVER answer questions about facts, locations, history, prices, or any specific information.\n"
                 "  - For ANY input that is not greetings, thanks, or emotions:\n"
                 "    you MUST respond ONLY with 'Could you ask me again?' — do NOT add any other words.\n"
-                f"  - Respond in {lang_name}, 2-3 sentences\n"
+                f"  - If the input is within scope, respond in {lang_name}, 1-2 sentences\n"
                 "  - Keep it speech-friendly (no emoji, no special characters)"
             )
 
