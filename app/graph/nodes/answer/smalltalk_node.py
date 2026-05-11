@@ -59,7 +59,7 @@ def make_smalltalk_node(llm: OpenAILLM):
                 "  - ONLY respond to: greetings, thanks, simple emotions. NOTHING ELSE.\n"
                 "  - NEVER answer questions about facts, locations, history, prices, or any specific information.\n"
                 "  - For ANY input that is not greetings, thanks, or emotions:\n"
-                "    you MUST respond ONLY with 'Could you ask me again?' — do NOT add any other words.\n"
+                f"    you MUST respond ONLY with the {lang_name} equivalent of 'Could you ask me again?' — do NOT add any other words.\n"
                 f"  - If the input is within scope, respond in {lang_name}, 1-2 sentences\n"
                 "  - Keep it speech-friendly (no emoji, no special characters)"
             )
