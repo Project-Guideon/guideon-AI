@@ -25,7 +25,7 @@ def make_intent_gate_node(llm: OpenAILLM):
 
     def intent_gate_node(state: GraphState) -> dict:
         text: str = state.get("normalized_text", "")
-        raw_stt_language: str = state.get("user_language") or state.get("language_code") or "ko"
+        raw_stt_language: str = state.get("language_code") or state.get("user_language") or "ko"
         stt_language: str = raw_stt_language.split("-")[0].lower() if isinstance(raw_stt_language, str) else "ko"
 
         messages = [
