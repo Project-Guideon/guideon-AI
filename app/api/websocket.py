@@ -499,9 +499,10 @@ async def ws_stream(websocket: WebSocket):
             _detected       = get_profile(last_lang_code)
             user_language   = _detected.user_language
             answer_language = _detected.answer_language
+            stt_lang_code   = _detected.stt_language_code
             logger.info(
-                "lang_detect trace_id=%s | client=%s → stt_detected=%s → user_language=%s answer_language=%s",
-                trace_id, _client_lang, last_lang_code, user_language, answer_language,
+                "lang_detect trace_id=%s | client=%s → stt_detected=%s → user_language=%s answer_language=%s stt_lang_code=%s",
+                trace_id, _client_lang, last_lang_code, user_language, answer_language, stt_lang_code,
             )
 
             # recv_task 완료 대기 (audio_receiver가 None을 넣은 뒤 종료)
