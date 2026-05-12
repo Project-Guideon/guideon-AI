@@ -98,7 +98,14 @@ class GoogleSTTV2:
         )
 
     def _normalize_lang(self, raw: str) -> str:
-        return self._LANG_MAP.get(raw) or self._LANG_MAP.get(raw.lower()) or raw.split("-")[0].lower()
+        mapped = self._LANG_MAP.get(raw) or self._LANG_MAP.get(raw.lower())
+        if mapped:
+            return mapped
+        prefix = raw.split("-")[0].lower()
+        # cmn-* 변형(cmn-Hant-TW 등) → zh
+        if prefix == "cmn":
+            return "zh"
+        return prefix
 
     def _to_bcp47(self, code: str) -> str:
         """단축 코드(ko, zh 등)를 BCP-47 전체 코드로 변환."""

@@ -213,10 +213,18 @@ def _build_mascot_dict(
 
 @router.post("/text_qa")
 async def text_qa(req: TextQARequest):
+    from app.core.language_profiles import get_profile as _get_profile
+    _profile = _get_profile(req.language_code)
     mascot = _build_mascot_dict(
         req.system_prompt, req.mascot_name, req.mascot_greeting, req.prompt_config
     )
     result = await asyncio.to_thread(
-        traced_text_run, req.query, req.site_id, req.language_code, mascot
+        traced_text_run,
+        req.query,
+        req.site_id,
+        user_language=_profile.user_language,
+        answer_language=_profile.answer_language,
+        stt_language_code=_profile.stt_language_code,
+        mascot=mascot,
     )
     return JSONResponse({"query": result.query, "answer": result.answer})
