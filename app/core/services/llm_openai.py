@@ -13,7 +13,7 @@ from langsmith.wrappers import wrap_openai
 @dataclass
 class LLMConfig:
     model: str = "gpt-4o-mini"
-    temperature: float = 0.2
+    temperature: float = 0.05
     max_tokens: int = 150
 
 
