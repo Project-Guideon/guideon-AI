@@ -41,9 +41,10 @@ def make_struct_db_node(llm: OpenAILLM):
             dist = p.get("distanceM")
             dist_str = f"{dist:.0f}m" if isinstance(dist, (int, float)) else "거리 미상"
             desc = p.get("description") or ""
+            desc_part = f" | 위치설명 및 부가 설명: {desc}" if desc else ""
             places_lines.append(
                 f"- placeId={p.get('placeId')} [{p.get('name')}] "
-                f"카테고리: {p.get('category')} | {same} | {dist_str} | {desc}"
+                f"카테고리: {p.get('category')} | {same} | {dist_str}{desc_part}"
             )
         places_text = "\n".join(places_lines)
 
@@ -69,9 +70,10 @@ def make_struct_db_node(llm: OpenAILLM):
             system_msg = (
                 f"{persona_block}\n"
                 "규칙:\n"
-                "  - 아래 장소 목록만 참고하세요 (장소를 지어내지 마세요)\n"
+                "  - 아래 장소 목록만 참고하세요 (목록에 없는 장소를 지어내지 마세요)\n"
                 "  - 같은 구역(✓ 같은 구역) 장소를 우선, 가까운 순서로 안내하세요\n"
-                "  - 장소 이름과 거리를 포함해 1~2문장으로 답하세요\n"
+                "  - '위치설명 및 부가 설명'이 있으면 반드시 포함해서 안내하세요\n"
+                "  - 장소 이름과 위치설명을 함께 1~2문장으로 답하세요\n"
                 "  - 이모지나 특수문자는 사용하지 마세요\n\n"
                 f"주변 장소 목록:\n{places_text}\n\n"
                 "반드시 아래 JSON 형식으로만 응답하세요 (마크다운 없이):\n"
@@ -86,7 +88,8 @@ def make_struct_db_node(llm: OpenAILLM):
                 f"  - Respond in {lang_name}, 1-2 sentences\n"
                 "  - Use ONLY the provided nearby places list (do not invent places)\n"
                 "  - Prioritize same-zone (✓ 같은 구역) places and shorter distances\n"
-                "  - Mention the place name and distance\n"
+                "  - If '위치설명' is provided, include that location detail in your answer\n"
+                "  - Mention the place name and its location detail\n"
                 "  - No emoji, no special characters\n\n"
                 f"Nearby places:\n{places_text}\n\n"
                 "Return ONLY valid JSON (no markdown):\n"
