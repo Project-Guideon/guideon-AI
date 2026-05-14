@@ -26,6 +26,7 @@ from langsmith import trace as ls_trace, traceable
 
 from app.core.dependencies import stt, tts, traced_text_run
 from app.core.services.chat_history import load_chat_history
+from app.core.language_profiles import get_profile
 
 router = APIRouter()
 
@@ -54,7 +55,10 @@ def split_sentences(text: str) -> list[str]:
     text = (text or "").strip()
     if not text:
         return []
-    parts = re.split(r"(?<=[.!?])\s+|(?<=다\.)\s*|(?<=요\.)\s*|(?<=니다\.)\s*", text)
+    parts = re.split(
+        r"(?<=[.!?])\s+|(?<=[。！？])|(?<=다\.)\s*|(?<=요\.)\s*|(?<=니다\.)\s*",
+        text,
+    )
     return [p.strip() for p in parts if p and p.strip()]
 
 
@@ -184,7 +188,9 @@ def traced_tts_synthesize(sentence: str, tts_language_code: str):
 def traced_ws_text_qa_invoke(
     query: str,
     site_id: int,
-    language_code: str,
+    user_language: str = "ko",
+    answer_language: str = "ko",
+    stt_language_code: str = "ko-KR",
     mascot: dict | None = None,
     device_id: str | None = None,
     chat_history: list[dict] | None = None,
@@ -195,7 +201,9 @@ def traced_ws_text_qa_invoke(
     return traced_text_run(
         query=query,
         site_id=site_id,
-        language_code=language_code,
+        user_language=user_language,
+        answer_language=answer_language,
+        stt_language_code=stt_language_code,
         mascot=mascot,
         device_id=device_id,
         chat_history=chat_history,
@@ -366,7 +374,8 @@ async def ws_stream(websocket: WebSocket):
                 })
                 return
             site_id        = int(start.get("siteId") or start.get("site_id") or 1)
-            stt_language   = start.get("language") or start.get("language_code") or "ko-KR"
+            _client_lang   = start.get("language") or start.get("language_code") or "ko-KR"
+            stt_language   = _client_lang  # 하위 호환 (ls_trace inputs 용)
             sample_rate_hz = int(start.get("sampleRateHz") or start.get("sample_rate_hz") or 16000)
             device_id_raw  = start.get("deviceId") or start.get("device_id")
             device_id      = str(device_id_raw).strip() if device_id_raw is not None else None
@@ -389,6 +398,17 @@ async def ws_stream(websocket: WebSocket):
         device_location = normalize_device_location_payload(start.get("deviceLocation") or start.get("device_location"))
         chat_history   = await load_chat_history(session_id) if session_id else []
 
+        # ── LanguageProfile: STT 언어 코드와 답변 언어 분리 ─────────────
+        _profile        = get_profile(_client_lang)
+        user_language   = _profile.user_language      # 예: "en"
+        stt_lang_code   = _profile.stt_language_code  # 예: "ko-KR"
+        answer_language = _profile.answer_language    # 예: "en"
+        logger.info(
+            "lang_profile trace_id=%s client=%s user_language=%s "
+            "stt_lang_code=%s answer_language=%s",
+            trace_id, _client_lang, user_language, stt_lang_code, answer_language,
+        )
+
 
         with ls_trace(
             name="ws_voice_textqa_pipeline",
@@ -409,7 +429,7 @@ async def ws_stream(websocket: WebSocket):
                     "chat_history_count": len(chat_history),
                     "mascot": mascot},
         ):
-            audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue(maxsize=250)
+            audio_q: "asyncio.Queue[Optional[bytes]]" = asyncio.Queue(maxsize=500)
             timing = {
                 "ws_start_at": time.perf_counter(),
                 "first_audio_at": None, "last_audio_at": None,
@@ -427,17 +447,18 @@ async def ws_stream(websocket: WebSocket):
             final_parts: list[str] = []
             current_utterance_interim = ""
             unfinalised_interims: list[str] = []
-            last_lang_code = stt_language
+            last_lang_code = stt_lang_code
 
             with ls_trace(
                 name="stt_stream", run_type="tool",
-                metadata={"trace_id": trace_id, "primary_language": stt_language,
+                metadata={"trace_id": trace_id, "primary_language": stt_lang_code,
+                          "user_language": user_language,
                           "sample_rate_hz": sample_rate_hz, "interim_results": interim_results},
             ):
                 try:
                     async for ev in stt.stream_events(
                         audio_q,
-                        primary_language=stt_language,
+                        primary_language=stt_lang_code,
                         sample_rate_hz=sample_rate_hz,
                         interim_results=interim_results,
                         single_utterance=False,
@@ -474,6 +495,16 @@ async def ws_stream(websocket: WebSocket):
 
             timing["stt_final_at"] = time.perf_counter()
 
+            # STT 실제 감지 언어로 profile 갱신 (클라이언트 start 언어보다 우선)
+            _detected       = get_profile(last_lang_code)
+            user_language   = _detected.user_language
+            answer_language = _detected.answer_language
+            stt_lang_code   = _detected.stt_language_code
+            logger.info(
+                "lang_detect trace_id=%s | client=%s → stt_detected=%s → user_language=%s answer_language=%s stt_lang_code=%s",
+                trace_id, _client_lang, last_lang_code, user_language, answer_language, stt_lang_code,
+            )
+
             # recv_task 완료 대기 (audio_receiver가 None을 넣은 뒤 종료)
             if recv_task and not recv_task.done():
                 try:
@@ -489,7 +520,7 @@ async def ws_stream(websocket: WebSocket):
             await safe_send({"type": "status", "stage": "stt_done", "trace_id": trace_id})
 
             # ── transcript 조합 ───────────────────
-            sep = "" if last_lang_code.startswith(("ja", "zh")) else " "
+            sep = "" if user_language in ("ja", "zh") else " "
             finals_text = sep.join(final_parts).strip()
 
             if current_utterance_interim.strip() and current_utterance_interim.strip() not in finals_text:
@@ -508,8 +539,6 @@ async def ws_stream(websocket: WebSocket):
                 })
                 return
 
-            tts_language_code = map_tts_language(last_lang_code)
-
             # ── LangGraph QA ──────────────────────
             await safe_send({"type": "status", "stage": "graph_start", "trace_id": trace_id})
             timing["qa_start_at"] = time.perf_counter()
@@ -518,13 +547,19 @@ async def ws_stream(websocket: WebSocket):
                 traced_ws_text_qa_invoke,
                 query,
                 site_id,
-                last_lang_code,
+                user_language,
+                answer_language,
+                stt_lang_code,
                 mascot,
                 device_id,
                 chat_history,
                 daily_infos,
                 device_location,
             )
+
+            # intent_gate가 actual_language를 보정했을 수 있으므로 qa_result에서 최종 언어 반영
+            final_answer_language = getattr(qa_result, "answer_language", None) or answer_language
+            tts_language_code = map_tts_language(final_answer_language)
             qa_total_ms = ms_delta(timing["qa_start_at"], time.perf_counter())
 
             answer_text = extract_answer_text(qa_result) or "죄송해요. 답변을 생성하지 못했어요."
@@ -548,7 +583,7 @@ async def ws_stream(websocket: WebSocket):
                         timing["qa_first_sentence_at"] = time.perf_counter()
 
                     await safe_send({"type": "llm_sentence", "text": sentence,
-                                     "language_code": last_lang_code, "trace_id": trace_id})
+                                     "language_code": final_answer_language, "trace_id": trace_id})
 
                     if tts_stream_on:
                         if idx == 0:
@@ -579,7 +614,7 @@ async def ws_stream(websocket: WebSocket):
                 )
                 await safe_send({
                     "type": "final_text", "site_id": site_id,
-                    "language_code": last_lang_code, "query": query,
+                    "language_code": final_answer_language, "query": query,
                     "answer": answer_text, "category": qa_category,
                     "answer_found": qa_answer_found,
                     "response_time_ms": response_time_ms,
@@ -601,7 +636,7 @@ async def ws_stream(websocket: WebSocket):
                 response_time_ms = ms_delta(timing["stop_received_at"], time.perf_counter())
                 await safe_send({
                     "type": "final_text", "site_id": site_id,
-                    "language_code": last_lang_code, "query": query,
+                    "language_code": final_answer_language, "query": query,
                     "answer": answer_text, "category": qa_category,
                     "answer_found": qa_answer_found,
                     "response_time_ms": response_time_ms,

@@ -12,8 +12,10 @@ class GraphState(TypedDict, total=False):
 
     # ── STT 출력 ──────────────────────────────────────────────────────────
     transcript: str            # STT 변환 텍스트
-    language_code: str         # 감지 언어 2자리: "ko" | "en" | "zh" | "ja" 등
-    user_language: str         # 원언어 보존 (language_code 와 동일값; 끝까지 유지)
+    language_code: str         # STT 감지 언어 2자리 (참고용; 답변 언어 결정에 쓰지 않음)
+    stt_language_code: str     # STT에 실제 사용한 BCP-47 코드 (예: ko-KR, ja-JP)
+    user_language: str         # 사용자 발화 언어 2자리 — 답변 생성 기준; 끝까지 유지
+    answer_language: str       # 답변 생성 언어 (기본적으로 user_language와 동일)
 
     # ── 정규화 ────────────────────────────────────────────────────────────
     normalized_text: str       # 잡음·공백 정제 후 텍스트

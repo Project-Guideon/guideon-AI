@@ -6,11 +6,21 @@ import websockets
 import base64
 import time
 
-WS_URL = "ws://localhost:8082/ws/v1/kiosk/stt?sessionId=b5e95ed7-aac2-483b-aa03-71b3b66fa5d6&siteId=5&languageCode=ko-KR&token=kiosk-south-01-test"
-WAV_PATH = "ko_04.wav"
 
-CHUNK_MS = 50
+#WS_URL = "ws://localhost:8082/ws/v1/kiosk/stt?sessionId=b5e95ed7-aac2-483b-aa03-71b3b66fa5d6&siteId=5&languageCode=ko-KR&token=kiosk-south-01-test"
+# 스크립트 위치 기준 상대 경로로 고정 (실행 디렉터리와 무관)
+WS_URL = "ws://localhost:8000/ws/stream"
+WAV_PATH = r"C:\Users\문현우\Project_Guideon\guideon_AI\중국어3.wav"
+
+
+CHUNK_MS = 400
 SAVE_TTS_AUDIO = True
+
+START_PAYLOAD = {
+    "type": "start",
+    "siteId": 3,
+    "language_code": "auto",  # 클라이언트 언어 감지 → 서버에서 실제 감지된 언어로 profile 갱신
+}
 
 
 def to_pcm16_mono_16k(wav_path: str):
@@ -37,8 +47,6 @@ async def main():
 
     async with websockets.connect(WS_URL, max_size=20_000_000) as ws:
 
-        t0 = time.perf_counter()
-
         t_stt_final = None
         t_llm_first = None
         t_tts_first = None
@@ -55,21 +63,24 @@ async def main():
 
                 if t in ("stt_interim", "stt_final"):
 
-                    print(f"[{t}] {data.get('text')}")
+                    lang = data.get("language_code", "?")
+                    print(f"[{t}] lang={lang} | {data.get('text')}")
 
                     if t == "stt_final" and t_stt_final is None:
                         t_stt_final = time.perf_counter()
 
                 elif t == "llm_sentence":
 
-                    print("[LLM]", data.get("text"))
+                    lang = data.get("language_code", "?")
+                    print(f"[LLM] lang={lang} | {data.get('text')}")
 
                     if t_llm_first is None:
                         t_llm_first = time.perf_counter()
 
                 elif t == "tts_chunk":
 
-                    print("[TTS]", data.get("text"))
+                    lang = data.get("language_code", "?")
+                    print(f"[TTS] lang={lang} | {data.get('text')}")
 
                     if t_tts_first is None:
                         t_tts_first = time.perf_counter()
@@ -81,6 +92,7 @@ async def main():
                 elif t == "final_text":
 
                     print("\n[FINAL ANSWER]")
+                    print("lang    :", data.get("language_code", "?"))
                     print("answer  :", data.get("answer"))
                     print("category:", data.get("category"))
 
@@ -91,6 +103,9 @@ async def main():
 
                 else:
                     print("[recv]", data)
+
+        await ws.send(json.dumps(START_PAYLOAD))
+        t0 = time.perf_counter()
 
         recv_task = asyncio.create_task(receiver())
 
@@ -107,10 +122,10 @@ async def main():
         if t_stt_final:
             print("STT latency:", round((t_stt_final - t0) * 1000), "ms")
 
-        if t_llm_first:
+        if t_llm_first and t_stt_final:
             print("LLM first token:", round((t_llm_first - t_stt_final) * 1000), "ms")
 
-        if t_tts_first:
+        if t_tts_first and t_llm_first:
             print("TTS first audio:", round((t_tts_first - t_llm_first) * 1000), "ms")
 
         if SAVE_TTS_AUDIO and tts_audio:
