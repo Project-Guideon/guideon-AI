@@ -31,7 +31,7 @@ from app.graph.nodes.answer.smalltalk_node import make_smalltalk_node
 
 # ── 노드: tool ────────────────────────────────────────────────────────────────
 from app.graph.nodes.tool.fetch_places_node import fetch_places_node
-from app.graph.nodes.answer.struct_db_node import make_struct_db_node
+from app.graph.nodes.tool.navigation_node import make_navigation_node
 from app.graph.nodes.answer.event_node import make_event_node
 
 # ── 노드: output ──────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ def _register_core_nodes(builder: StateGraph, rag: PgVectorRAG, llm: OpenAILLM):
     builder.add_node("event",              make_event_node(llm))
 
     builder.add_node("fetch_places",       fetch_places_node)
-    builder.add_node("struct_db",          make_struct_db_node(llm))
+    builder.add_node("struct_db",          make_navigation_node(llm))
 
     _retrieve = make_retrieve_node_v2(rag) if isinstance(rag, PgVectorRAG_V2) else make_retrieve_node(rag)
     builder.add_node("retrieve",           _retrieve)
