@@ -566,6 +566,7 @@ async def ws_stream(websocket: WebSocket):
             sentences = split_sentences(answer_text)
             qa_category = (qa_result.get("category") if isinstance(qa_result, dict) else getattr(qa_result, "category", None)) or "GENERAL"
             qa_answer_found = extract_answer_found(qa_result, qa_category, answer_text)
+            qa_map_url = (qa_result.get("map_url") if isinstance(qa_result, dict) else getattr(qa_result, "map_url", None)) or None
 
             tts_first_audio_latency_ms = None
             tts_total_ms = None
@@ -617,6 +618,7 @@ async def ws_stream(websocket: WebSocket):
                     "language_code": final_answer_language, "query": query,
                     "answer": answer_text, "category": qa_category,
                     "answer_found": qa_answer_found,
+                    "map_url": qa_map_url,
                     "response_time_ms": response_time_ms,
                     "trace_id": trace_id,
                 })
@@ -639,6 +641,7 @@ async def ws_stream(websocket: WebSocket):
                     "language_code": final_answer_language, "query": query,
                     "answer": answer_text, "category": qa_category,
                     "answer_found": qa_answer_found,
+                    "map_url": qa_map_url,
                     "response_time_ms": response_time_ms,
                     "trace_id": trace_id,
                 })

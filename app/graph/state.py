@@ -57,6 +57,7 @@ class GraphState(TypedDict, total=False):
 
     # ── intent_gate 추출 결과 ────────────────────────────────────────────
     place_category: Optional[str]   # struct_db 라우트일 때 추출된 장소 카테고리 (ex: RESTROOM, PARKING)
+    place_name_query: Optional[str] # 특정 장소명이 언급된 경우 (ex: "광화문") → navigation_node에서 places/search 호출
 
     # ── Spring Boot Core 에서 전달받은 위치 context ──────────────────────
     nearby_places: List[Dict[str, Any]]  # [{placeId, name, category, description, distanceM, sameZone}]
@@ -64,6 +65,7 @@ class GraphState(TypedDict, total=False):
 
     # ── struct_db / answer 결과 메타 ─────────────────────────────────────
     place_id: Optional[int]    # 언급된 장소 ID (display hint용)
+    map_url: Optional[str]     # 카카오맵 도보 길찾기 URL (Unity WebView에서 열기)
     emotion: str               # 캐릭터 감정: GUIDING | HAPPY | THINKING | SORRY | EXCITED
     category: str              # 질문 유형: DIRECTION | HOURS | FACILITY | HISTORY | GENERAL | ERROR
 

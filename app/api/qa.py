@@ -66,6 +66,7 @@ class InternalQaRequest(BaseModel):
 class InternalQaResponse(BaseModel):
     answer: str
     placeId: Optional[int] = None
+    mapUrl: Optional[str] = None
     emotion: str = "HAPPY"
     language: str = "ko"
     category: str = "GENERAL"
@@ -138,6 +139,7 @@ async def internal_qa(req: InternalQaRequest):
     return InternalQaResponse(
         answer=answer or fallback_answers.get(lang2, fallback_answers["en"]),
         placeId=result.get("place_id"),
+        mapUrl=result.get("map_url"),
         emotion=result.get("emotion") or ("GUIDING" if answer else "SORRY"),
         language=lang2,
         category=result.get("category") or "GENERAL",
