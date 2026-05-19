@@ -558,7 +558,7 @@ async def ws_stream(websocket: WebSocket):
             )
 
             # intent_gate가 actual_language를 보정했을 수 있으므로 qa_result에서 최종 언어 반영
-            final_answer_language = getattr(qa_result, "answer_language", None) or answer_language
+            final_answer_language = (qa_result.get("answer_language") if isinstance(qa_result, dict) else getattr(qa_result, "answer_language", None)) or answer_language
             tts_language_code = map_tts_language(final_answer_language)
             qa_total_ms = ms_delta(timing["qa_start_at"], time.perf_counter())
 
