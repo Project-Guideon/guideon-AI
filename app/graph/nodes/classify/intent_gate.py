@@ -29,6 +29,22 @@ def make_intent_gate_node(llm: OpenAILLM):
         raw_stt_language: str = state.get("language_code") or state.get("user_language") or "ko"
         stt_language: str = raw_stt_language.split("-")[0].lower() if isinstance(raw_stt_language, str) else "ko"
 
+        # 최근 2턴(4개 메시지)만 — 대명사/지시어 해소용
+        raw_history: list = state.get("chat_history") or []
+        recent_history = raw_history[-4:] if len(raw_history) > 4 else raw_history
+        history_block = ""
+        if recent_history:
+            lines = []
+            for msg in recent_history:
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                if role == "user":
+                    lines.append(f"user: {content}")
+                elif role == "assistant":
+                    lines.append(f"assistant: {content}")
+            if lines:
+                history_block = "\n\nRecent conversation (for coreference only — do NOT answer based on this):\n" + "\n".join(lines)
+
         messages = [
             {
                 "role": "system",
@@ -105,7 +121,7 @@ def make_intent_gate_node(llm: OpenAILLM):
                     "DO NOT generate any answer or explanation."
                 ),
             },
-            {"role": "user", "content": f"Input: {text}\nstt_language: {stt_language}"},
+            {"role": "user", "content": f"Input: {text}\nstt_language: {stt_language}{history_block}"},
         ]
 
         method = "llm"
