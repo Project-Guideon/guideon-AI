@@ -22,6 +22,7 @@ import wave
 from dataclasses import dataclass, field
 from typing import AsyncIterator, List, Optional
 
+import numpy as np
 import openai
 
 logger = logging.getLogger(__name__)
@@ -155,28 +156,20 @@ class OpenAIRealtimeSTT:
             return pcm_bytes
 
         try:
-            import numpy as np
-            try:
-                from scipy.signal import resample_poly
-                from math import gcd
-                samples = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32)
-                g = gcd(_TARGET_HZ, src_hz)
-                resampled = resample_poly(samples, _TARGET_HZ // g, src_hz // g)
-            except ImportError:
-                # scipy 없음 → numpy 선형 보간
-                samples = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32)
-                n_out = int(len(samples) * _TARGET_HZ / src_hz)
-                x_old = np.linspace(0, 1, len(samples))
-                x_new = np.linspace(0, 1, n_out)
-                resampled = np.interp(x_new, x_old, samples)
-            return np.clip(resampled, -32768, 32767).astype(np.int16).tobytes()
-
+            from scipy.signal import resample_poly
+            from math import gcd
+            samples = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32)
+            g = gcd(_TARGET_HZ, src_hz)
+            resampled = resample_poly(samples, _TARGET_HZ // g, src_hz // g)
         except ImportError:
-            logger.error(
-                "realtime_stt: numpy 없음 → %d Hz PCM 그대로 전송 (24 kHz 필요, 품질 저하 발생)",
-                src_hz,
-            )
-            return pcm_bytes
+            # scipy 없음 → numpy 선형 보간
+            samples = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32)
+            n_out = int(len(samples) * _TARGET_HZ / src_hz)
+            x_old = np.linspace(0, 1, len(samples))
+            x_new = np.linspace(0, 1, n_out)
+            resampled = np.interp(x_new, x_old, samples)
+
+        return np.clip(resampled, -32768, 32767).astype(np.int16).tobytes()
 
     # ── transcribe (동기, HTTP API 단건 전사) ─────────────
 
