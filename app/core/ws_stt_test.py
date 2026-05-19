@@ -18,7 +18,7 @@ SAVE_TTS_AUDIO = True
 
 START_PAYLOAD = {
     "type": "start",
-    "siteId": 3,
+    "siteId": 2,
     "language_code": "auto",  # 클라이언트 언어 감지 → 서버에서 실제 감지된 언어로 profile 갱신
 }
 
