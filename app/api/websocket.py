@@ -499,9 +499,10 @@ async def ws_stream(websocket: WebSocket):
             _detected       = get_profile(last_lang_code)
             user_language   = _detected.user_language
             answer_language = _detected.answer_language
+            stt_lang_code   = _detected.stt_language_code
             logger.info(
-                "lang_detect trace_id=%s | client=%s → stt_detected=%s → user_language=%s answer_language=%s",
-                trace_id, _client_lang, last_lang_code, user_language, answer_language,
+                "lang_detect trace_id=%s | client=%s → stt_detected=%s → user_language=%s answer_language=%s stt_lang_code=%s",
+                trace_id, _client_lang, last_lang_code, user_language, answer_language, stt_lang_code,
             )
 
             # recv_task 완료 대기 (audio_receiver가 None을 넣은 뒤 종료)
@@ -557,7 +558,7 @@ async def ws_stream(websocket: WebSocket):
             )
 
             # intent_gate가 actual_language를 보정했을 수 있으므로 qa_result에서 최종 언어 반영
-            final_answer_language = getattr(qa_result, "answer_language", None) or answer_language
+            final_answer_language = (qa_result.get("answer_language") if isinstance(qa_result, dict) else getattr(qa_result, "answer_language", None)) or answer_language
             tts_language_code = map_tts_language(final_answer_language)
             qa_total_ms = ms_delta(timing["qa_start_at"], time.perf_counter())
 
@@ -565,6 +566,7 @@ async def ws_stream(websocket: WebSocket):
             sentences = split_sentences(answer_text)
             qa_category = (qa_result.get("category") if isinstance(qa_result, dict) else getattr(qa_result, "category", None)) or "GENERAL"
             qa_answer_found = extract_answer_found(qa_result, qa_category, answer_text)
+            qa_map_url = (qa_result.get("map_url") if isinstance(qa_result, dict) else getattr(qa_result, "map_url", None)) or None
 
             tts_first_audio_latency_ms = None
             tts_total_ms = None
@@ -616,6 +618,7 @@ async def ws_stream(websocket: WebSocket):
                     "language_code": final_answer_language, "query": query,
                     "answer": answer_text, "category": qa_category,
                     "answer_found": qa_answer_found,
+                    "map_url": qa_map_url,
                     "response_time_ms": response_time_ms,
                     "trace_id": trace_id,
                 })
@@ -638,6 +641,7 @@ async def ws_stream(websocket: WebSocket):
                     "language_code": final_answer_language, "query": query,
                     "answer": answer_text, "category": qa_category,
                     "answer_found": qa_answer_found,
+                    "map_url": qa_map_url,
                     "response_time_ms": response_time_ms,
                     "trace_id": trace_id,
                 })

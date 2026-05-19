@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Optional
 
 from openai import APIConnectionError, APITimeoutError, RateLimitError, APIError
 
@@ -27,6 +28,22 @@ def make_intent_gate_node(llm: OpenAILLM):
         text: str = state.get("normalized_text", "")
         raw_stt_language: str = state.get("language_code") or state.get("user_language") or "ko"
         stt_language: str = raw_stt_language.split("-")[0].lower() if isinstance(raw_stt_language, str) else "ko"
+
+        # 최근 2턴(4개 메시지)만 — 대명사/지시어 해소용
+        raw_history: list = state.get("chat_history") or []
+        recent_history = raw_history[-4:] if len(raw_history) > 4 else raw_history
+        history_block = ""
+        if recent_history:
+            lines = []
+            for msg in recent_history:
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                if role == "user":
+                    lines.append(f"user: {content}")
+                elif role == "assistant":
+                    lines.append(f"assistant: {content}")
+            if lines:
+                history_block = "\n\nRecent conversation (for coreference only — do NOT answer based on this):\n" + "\n".join(lines)
 
         messages = [
             {
@@ -83,20 +100,28 @@ def make_intent_gate_node(llm: OpenAILLM):
                     "   - Do NOT interpret, summarize, or add any words not present in the original\n"
                     "   - If the input is already Korean, return it as-is\n"
                     "\n"
+                    "5. EXTRACT place name (place_name_query):\n"
+                    "   - ONLY when top intent is struct_db AND the user mentions a SPECIFIC named place\n"
+                    "     (e.g., '광화문', '경회루', '근정전', a named shop or building)\n"
+                    "   - Set to null if the user asks for a category only (e.g., '화장실 어디야?', '주차장')\n"
+                    "   - Set to null if top intent is NOT struct_db\n"
+                    "   - Write in Korean (translate if needed)\n"
+                    "\n"
                     "Respond ONLY with valid JSON. Example:\n"
                     '{"actual_language": "ja", "corrected_text": "경복궁の観覧時間は何時から何時までですか", '
                     '"ranking": ["rag", "struct_db", "smalltalk", "event"], "place_category": null, '
-                    '"retrieval_query_ko": "경복궁 관람 시간"}\n'
+                    '"place_name_query": null, "retrieval_query_ko": "경복궁 관람 시간"}\n'
                     "\n"
                     "actual_language: ISO 639-1 code — ko, en, ja, or zh.\n"
                     "The first item in ranking is the most likely intent. Include all 4 categories.\n"
                     "place_category: set ONLY when top intent is struct_db, otherwise null.\n"
                     "  Possible values: TOILET, TICKET, RESTAURANT, SHOP, INFO, ATTRACTION, PARKING, OTHER\n"
+                    "place_name_query: specific named place in Korean, or null.\n"
                     "retrieval_query_ko: ALWAYS required, Korean keywords only.\n"
                     "DO NOT generate any answer or explanation."
                 ),
             },
-            {"role": "user", "content": f"Input: {text}\nstt_language: {stt_language}"},
+            {"role": "user", "content": f"Input: {text}\nstt_language: {stt_language}{history_block}"},
         ]
 
         method = "llm"
@@ -104,6 +129,7 @@ def make_intent_gate_node(llm: OpenAILLM):
         corrected_text = text      # 기본값: 보정 없음
         retrieval_query_ko = text  # 기본값: 원문 그대로
         actual_language = stt_language  # 기본값: STT 감지 언어 그대로
+        place_name_query: Optional[str] = None
         try:
             raw = llm.chat(messages, max_tokens=300)
             parsed = json.loads(raw)
@@ -134,6 +160,10 @@ def make_intent_gate_node(llm: OpenAILLM):
                 else None
             )
 
+            # 특정 장소명 추출 (struct_db 1순위일 때만 유효)
+            pnq = parsed.get("place_name_query")
+            place_name_query = pnq.strip() if isinstance(pnq, str) and pnq.strip() else None
+
             # 유효성 검증: 4개 의도가 모두 포함되어야 함
             if not isinstance(ranking, list):
                 ranking = _DEFAULT_RANKING
@@ -155,21 +185,25 @@ def make_intent_gate_node(llm: OpenAILLM):
         except (json.JSONDecodeError, ValueError) as e:
             ranking = _DEFAULT_RANKING
             place_category = None
+            place_name_query = None
             method = "llm_fallback_invalid_json"
             error = str(e)
         except (APIConnectionError, APITimeoutError) as e:
             ranking = _DEFAULT_RANKING
             place_category = None
+            place_name_query = None
             method = "llm_fallback_connection_error"
             error = str(e)
         except RateLimitError as e:
             ranking = _DEFAULT_RANKING
             place_category = None
+            place_name_query = None
             method = "llm_fallback_rate_limit"
             error = str(e)
         except APIError as e:
             ranking = _DEFAULT_RANKING
             place_category = None
+            place_name_query = None
             method = "llm_fallback_api_error"
             error = f"{e.__class__.__name__}: {e}"
 
@@ -187,6 +221,7 @@ def make_intent_gate_node(llm: OpenAILLM):
             "retrieval_query_ko": retrieval_query_ko,
             "ranking": ranking,
             "place_category": place_category,
+            "place_name_query": place_name_query,
             "method": method,
         }
         if error:
@@ -195,14 +230,16 @@ def make_intent_gate_node(llm: OpenAILLM):
         # 상위 N개 의도만 시도
         ranking = ranking[:_MAX_INTENTS]
 
-        # 1순위가 struct_db가 아니면 place_category 무효화
+        # 1순위가 struct_db가 아니면 place_category, place_name_query 무효화
         if ranking[0] != "struct_db":
             place_category = None
+            place_name_query = None
 
         return {
             "intent_ranking": ranking,
             "current_intent_index": 0,
             "place_category": place_category,
+            "place_name_query": place_name_query,
             "normalized_text": corrected_text,
             "retrieval_query_ko": retrieval_query_ko,
             "user_language": actual_language,

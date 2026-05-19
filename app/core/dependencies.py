@@ -43,6 +43,7 @@ def traced_voice_run(audio_bytes: bytes, site_id: int, language_code: str = "ko"
 def traced_text_run(
     query: str,
     site_id: int,
+    *,
     user_language: str = "ko",
     answer_language: str = "ko",
     stt_language_code: str = "ko-KR",

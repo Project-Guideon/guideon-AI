@@ -66,6 +66,7 @@ class InternalQaRequest(BaseModel):
 class InternalQaResponse(BaseModel):
     answer: str
     placeId: Optional[int] = None
+    mapUrl: Optional[str] = None
     emotion: str = "HAPPY"
     language: str = "ko"
     category: str = "GENERAL"
@@ -138,6 +139,7 @@ async def internal_qa(req: InternalQaRequest):
     return InternalQaResponse(
         answer=answer or fallback_answers.get(lang2, fallback_answers["en"]),
         placeId=result.get("place_id"),
+        mapUrl=result.get("map_url"),
         emotion=result.get("emotion") or ("GUIDING" if answer else "SORRY"),
         language=lang2,
         category=result.get("category") or "GENERAL",
@@ -213,10 +215,18 @@ def _build_mascot_dict(
 
 @router.post("/text_qa")
 async def text_qa(req: TextQARequest):
+    from app.core.language_profiles import get_profile as _get_profile
+    _profile = _get_profile(req.language_code)
     mascot = _build_mascot_dict(
         req.system_prompt, req.mascot_name, req.mascot_greeting, req.prompt_config
     )
     result = await asyncio.to_thread(
-        traced_text_run, req.query, req.site_id, req.language_code, mascot
+        traced_text_run,
+        req.query,
+        req.site_id,
+        user_language=_profile.user_language,
+        answer_language=_profile.answer_language,
+        stt_language_code=_profile.stt_language_code,
+        mascot=mascot,
     )
     return JSONResponse({"query": result.query, "answer": result.answer})
