@@ -2,8 +2,10 @@ import os
 import json
 import redis.asyncio as aioredis
 
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+_REDIS_URL = (
+    os.getenv("REDIS_URL")
+    or f"redis://{os.getenv('REDIS_HOST', 'localhost')}:{os.getenv('REDIS_PORT', '6379')}"
+)
 CHAT_HISTORY_MAX_TURNS = 10  # 최근 10턴 (user+assistant 각 1개씩 = 20개 항목)
 
 # ConnectionPool 공유 — 이벤트 루프에 안전하게 재사용
@@ -14,7 +16,7 @@ def _get_pool() -> aioredis.ConnectionPool:
     global _pool
     if _pool is None:
         _pool = aioredis.ConnectionPool.from_url(
-            f"redis://{REDIS_HOST}:{REDIS_PORT}",
+            _REDIS_URL,
             decode_responses=True,
             socket_connect_timeout=1,   # 연결 타임아웃 1초
             socket_timeout=2,           # 읽기 타임아웃 2초
