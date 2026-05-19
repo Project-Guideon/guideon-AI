@@ -140,7 +140,7 @@ def extract_answer_text(result) -> str:
 # Traceable 래퍼
 # ──────────────────────────────────────────────
 
-def extract_answer_found(result, category: str, answer_text: str) -> bool:
+def extract_answer_found(result, category: str = "", answer_text: str = "") -> bool:
     value = None
     if isinstance(result, dict):
         value = result.get("answer_found")
@@ -374,7 +374,7 @@ async def ws_stream(websocket: WebSocket):
                 })
                 return
             site_id        = int(start.get("siteId") or start.get("site_id") or 1)
-            _client_lang   = start.get("language") or start.get("language_code") or "ko-KR"
+            _client_lang   = start.get("language") or start.get("language_code") or "auto"
             stt_language   = _client_lang  # 하위 호환 (ls_trace inputs 용)
             sample_rate_hz = int(start.get("sampleRateHz") or start.get("sample_rate_hz") or 16000)
             device_id_raw  = start.get("deviceId") or start.get("device_id")
