@@ -26,15 +26,15 @@ stt = _STTClass(_STTConfig())
 # Google TTS는 Cartesia 실패 시 폴백으로 계속 유지
 tts = GoogleTTS(TTSConfig(language_code="ko-KR"))
 
-# Cartesia TTS — 환경변수 미설정 시 None (Google TTS 폴백)
-# Phase 2에서 voice_id가 마스코트별로 분리되면 여기서 기본값 역할만 하게 됨
+# Cartesia TTS — CARTESIA_API_KEY만 있으면 활성화 (voice_id는 선택값)
+# CARTESIA_VOICE_ID 없이도 마스코트별 voice_id로 Cartesia 사용 가능
 _cartesia_api_key = os.getenv("CARTESIA_API_KEY")
-_cartesia_voice_id = os.getenv("CARTESIA_VOICE_ID")
+_cartesia_voice_id = os.getenv("CARTESIA_VOICE_ID")  # 기본 voice_id (없으면 None)
 cartesia_tts: CartesiaTTS | None = None
-if _cartesia_api_key and _cartesia_voice_id:
+if _cartesia_api_key:
     try:
         cartesia_tts = CartesiaTTS(api_key=_cartesia_api_key, voice_id=_cartesia_voice_id)
-        _logger.info("CartesiaTTS 초기화 완료: voice_id=%s", _cartesia_voice_id)
+        _logger.info("CartesiaTTS 초기화 완료: default_voice_id=%s", _cartesia_voice_id or "(없음 — 마스코트별 지정 필수)")
     except Exception as _exc:
         _logger.warning("CartesiaTTS 초기화 실패 → Google TTS 폴백 사용: %s", _exc)
 

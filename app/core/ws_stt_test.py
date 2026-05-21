@@ -11,7 +11,7 @@ import time
 #WS_URL = "ws://localhost:8082/ws/v1/kiosk/stt?sessionId=b5e95ed7-aac2-483b-aa03-71b3b66fa5d6&siteId=5&languageCode=ko-KR&token=kiosk-south-01-test"
 # 스크립트 위치 기준 상대 경로로 고정 (실행 디렉터리와 무관)
 WS_URL = "ws://localhost:8000/ws/stream"
-WAV_PATH = r"C:\Users\ty532\IdeaProjects\guideon-AI\ko_04.wav"
+WAV_PATH = r"C:\Users\ty532\IdeaProjects\guideon-AI\중국어3.wav"
 
 # Cartesia 테스트용 voice_id (None이면 서버 환경변수 기본값 사용)
 CARTESIA_VOICE_ID = "6fd8e3fc-a59d-479f-a072-b4f7e8284a78"
@@ -101,9 +101,13 @@ async def main():
 
                     if SAVE_TTS_AUDIO:
                         audio = base64.b64decode(data["audio_b64"])
-                        tts_audio.append(audio)
                         if tts_format is None:
                             tts_format = fmt
+                        elif fmt != tts_format:
+                            raise RuntimeError(
+                                f"TTS audio_format이 스트림 중간에 변경됨: {tts_format} → {fmt}"
+                            )
+                        tts_audio.append(audio)
 
                 elif t == "final_text":
 

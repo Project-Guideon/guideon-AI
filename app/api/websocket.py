@@ -211,7 +211,9 @@ async def _synthesize_sentence(
     if cartesia_tts is not None:
         try:
             audio = await cartesia_tts.synthesize_async(sentence, tts_language_code, voice_id=voice_id)
-            return audio, "pcm_s16le"
+            if audio:
+                return audio, "pcm_s16le"
+            logger.warning("Cartesia TTS 빈 오디오 반환 → Google TTS 폴백")
         except Exception as exc:
             logger.warning("Cartesia TTS 실패 → Google TTS 폴백: %s", exc)
     # Google TTS는 동기 함수이므로 스레드풀에서 실행

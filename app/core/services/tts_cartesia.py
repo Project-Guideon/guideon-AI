@@ -33,14 +33,14 @@ class CartesiaTTS:
     def __init__(
         self,
         api_key: str,
-        voice_id: str,
+        voice_id: Optional[str] = None,
         model_id: str = "sonic-2",
         sample_rate: int = 24000,
     ):
         """
         Args:
             api_key: Cartesia API 키 (환경변수 CARTESIA_API_KEY)
-            voice_id: 사용할 음성 ID (환경변수 CARTESIA_VOICE_ID)
+            voice_id: 기본 음성 ID. None이면 마스코트별 voice_id를 필수로 지정해야 함
             model_id: Cartesia 모델 ID (기본값: sonic-2)
             sample_rate: 출력 샘플레이트(Hz) (기본값: 24000)
         """
@@ -89,6 +89,8 @@ class CartesiaTTS:
 
         lang = self.map_language(language_code)
         vid = voice_id or self.voice_id
+        if not vid:
+            raise ValueError("voice_id가 지정되지 않았습니다. 마스코트 ttsVoiceId 또는 CARTESIA_VOICE_ID를 설정하세요.")
         buf = bytearray()
 
         # websocket()은 async 메서드 — await으로 연결 후 finally에서 반드시 close
