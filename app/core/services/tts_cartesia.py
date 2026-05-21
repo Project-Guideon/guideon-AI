@@ -91,18 +91,22 @@ class CartesiaTTS:
         vid = voice_id or self.voice_id
         buf = bytearray()
 
-        # 매 호출마다 새 WebSocket 연결을 생성
-        # Phase 1: 문장 단위 호출이므로 커넥션 재사용 오버헤드가 적음
-        async with self._client.tts.websocket() as ws:
-            async for output in ws.send(
+        # websocket()은 async 메서드 — await으로 연결 후 finally에서 반드시 close
+        ws = await self._client.tts.websocket()
+        try:
+            # send()는 stream=True 시 AsyncGenerator 반환 — await 후 async for로 순회
+            audio_gen = await ws.send(
                 model_id=self.model_id,
                 transcript=text,
-                voice={"mode": "id", "id": vid},
+                voice_id=vid,           # 문자열 직접 전달 (dict 아님)
                 output_format=self._output_format,
                 language=lang,
-                stream=True,  # 스트리밍 모드: 첫 청크를 빠르게 수신
-            ):
-                if output.audio:
-                    buf.extend(output.audio)
+                stream=True,
+            )
+            async for chunk in audio_gen:
+                if chunk.get("audio"):  # chunk는 TypedDict — .audio 아닌 ["audio"]
+                    buf.extend(chunk["audio"])
+        finally:
+            await ws.close()
 
         return bytes(buf)
