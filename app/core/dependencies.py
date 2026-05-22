@@ -3,6 +3,7 @@
 기존 main_fastapi.py 상단 전역 초기화 코드를 그대로 분리.
 각 라우터(api/*.py)에서 여기서 import해서 사용.
 """
+import logging
 import os
 
 from openai import OpenAI
@@ -10,16 +11,32 @@ from langsmith import traceable
 
 from app.core.services.realtime_stt import OpenAIRealtimeSTT as _STTClass, RealtimeSTTConfig as _STTConfig
 from app.core.services.tts_google import GoogleTTS, TTSConfig
+from app.core.services.tts_cartesia import CartesiaTTS
 from app.core.services.rag_pgvector import PgVectorRAG, OpenAIEmbedder
 from app.core.services.rag_pgvector_v2 import PgVectorRAG_V2
 from app.core.services.llm_openai import OpenAILLM, LLMConfig
 from app.core.services.pipeline import VoicePipeline, TextPipeline
 
+_logger = logging.getLogger(__name__)
+
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
 stt = _STTClass(_STTConfig())
+# Google TTS는 Cartesia 실패 시 폴백으로 계속 유지
 tts = GoogleTTS(TTSConfig(language_code="ko-KR"))
+
+# Cartesia TTS — CARTESIA_API_KEY만 있으면 활성화 (voice_id는 선택값)
+# CARTESIA_VOICE_ID 없이도 마스코트별 voice_id로 Cartesia 사용 가능
+_cartesia_api_key = os.getenv("CARTESIA_API_KEY")
+_cartesia_voice_id = os.getenv("CARTESIA_VOICE_ID")  # 기본 voice_id (없으면 None)
+cartesia_tts: CartesiaTTS | None = None
+if _cartesia_api_key:
+    try:
+        cartesia_tts = CartesiaTTS(api_key=_cartesia_api_key, voice_id=_cartesia_voice_id)
+        _logger.info("CartesiaTTS 초기화 완료: default_voice_id=%s", _cartesia_voice_id or "(없음 — 마스코트별 지정 필수)")
+    except Exception as _exc:
+        _logger.warning("CartesiaTTS 초기화 실패 → Google TTS 폴백 사용: %s", _exc)
 
 embedder = OpenAIEmbedder(client=client, model="text-embedding-3-small")
 

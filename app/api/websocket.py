@@ -24,7 +24,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from google.api_core import exceptions as google_exceptions
 from langsmith import trace as ls_trace, traceable
 
-from app.core.dependencies import stt, tts, traced_text_run
+from app.core.dependencies import stt, tts, cartesia_tts, traced_text_run
 from app.core.services.chat_history import load_chat_history
 from app.core.language_profiles import get_profile
 
@@ -81,6 +81,8 @@ def normalize_mascot_payload(raw_mascot: object, raw_start: object | None = None
     raw_mascot = _as_dict(raw_mascot)
     raw_start = _as_dict(raw_start)
     prompt_config = _as_dict(raw_start.get("promptConfig") or raw_mascot.get("promptConfig"))
+    # Cartesia 음성 ID: start 페이로드의 ttsVoiceId 우선, 없으면 mascot 딕셔너리의 값 사용
+    _raw_voice = _first_non_empty(raw_start.get("ttsVoiceId"), raw_mascot.get("ttsVoiceId"), raw_mascot.get("voice_id"))
     return {
         "system_prompt":          _first_non_empty(raw_mascot.get("system_prompt"), raw_start.get("systemPrompt")),
         "mascot_name":            _first_non_empty(raw_mascot.get("mascot_name"), raw_start.get("name")),
@@ -90,6 +92,8 @@ def normalize_mascot_payload(raw_mascot: object, raw_start: object | None = None
         "mascot_struct_db_style": _prompt_config_value(raw_mascot, prompt_config, "mascot_struct_db_style", "struct_db_style"),
         "mascot_RAG_style":       _prompt_config_value(raw_mascot, prompt_config, "mascot_RAG_style", "RAG_style"),
         "mascot_event_style":     _prompt_config_value(raw_mascot, prompt_config, "mascot_event_style", "event_node_style"),
+        # Phase 2: 마스코트별 Cartesia 음성 ID (None이면 환경변수 기본값 사용)
+        "voice_id":               str(_raw_voice) if _raw_voice else None,
     }
 
 
@@ -182,6 +186,39 @@ def emit_latency_summary(
 @traceable(name="tts_synthesize", run_type="tool")
 def traced_tts_synthesize(sentence: str, tts_language_code: str):
     return tts.synthesize(sentence, tts_language_code)
+
+
+async def _synthesize_sentence(
+    sentence: str,
+    tts_language_code: str,
+    voice_id: str | None = None,
+) -> tuple[bytes, str]:
+    """
+    문장 하나를 오디오 바이트로 변환합니다.
+
+    우선순위:
+      1. CartesiaTTS (pcm_s16le) — CARTESIA_API_KEY + CARTESIA_VOICE_ID 설정 시
+      2. Google TTS (mp3) — Cartesia 미설정 또는 오류 시 폴백
+
+    Args:
+        sentence: 합성할 문장
+        tts_language_code: 언어 코드 (예: "ko-KR", "ja-JP")
+        voice_id: Cartesia 음성 ID 오버라이드 (Phase 2: 마스코트별 음성). None이면 기본 voice 사용.
+
+    Returns:
+        (audio_bytes, audio_format) — audio_format은 Unity 클라이언트에 전달되는 포맷 문자열
+    """
+    if cartesia_tts is not None:
+        try:
+            audio = await cartesia_tts.synthesize_async(sentence, tts_language_code, voice_id=voice_id)
+            if audio:
+                return audio, "pcm_s16le"
+            logger.warning("Cartesia TTS 빈 오디오 반환 → Google TTS 폴백")
+        except Exception as exc:
+            logger.warning("Cartesia TTS 실패 → Google TTS 폴백: %s", exc)
+    # Google TTS는 동기 함수이므로 스레드풀에서 실행
+    audio = await asyncio.to_thread(tts.synthesize, sentence, tts_language_code)
+    return audio, "mp3"
 
 
 @traceable(name="ws_text_qa_invoke", run_type="chain")
@@ -282,6 +319,7 @@ async def send_tts_chunks(
     safe_send,           # ws_stream 스코프의 safe_send 함수
     start_seq: int = 0,
     mark_final: bool = True,
+    voice_id: str | None = None,  # Phase 2: 마스코트별 Cartesia 음성 ID
 ) -> dict:
     non_empty = [s.strip() for s in sentences if s and s.strip()]
     first_tts_audio_at = None
@@ -290,7 +328,9 @@ async def send_tts_chunks(
 
     for idx, sentence in enumerate(non_empty):
         t0 = time.perf_counter()
-        audio_chunk = await asyncio.to_thread(traced_tts_synthesize, sentence, tts_language_code)
+        # Cartesia 우선 시도, 실패 시 Google TTS 폴백
+        # audio_format은 실제 사용된 TTS 엔진에 따라 결정됨 (pcm_s16le 또는 mp3)
+        audio_chunk, audio_format = await _synthesize_sentence(sentence, tts_language_code, voice_id)
         total_tts_ms += round((time.perf_counter() - t0) * 1000)
 
         if first_tts_audio_at is None:
@@ -300,7 +340,7 @@ async def send_tts_chunks(
             "type": "tts_chunk",
             "seq": current_seq,
             "text": sentence,
-            "audio_format": "mp3",
+            "audio_format": audio_format,
             "audio_b64": base64.b64encode(audio_chunk).decode("utf-8"),
             "language_code": tts_language_code,
             "is_final": mark_final and idx == len(non_empty) - 1,
@@ -394,6 +434,8 @@ async def ws_stream(websocket: WebSocket):
         tts_stream_on  = bool(start["ttsStream"] if "ttsStream" in start else start.get("tts_stream", True))
         realtime       = bool(start.get("realtime", False))
         mascot         = normalize_mascot_payload(start.get("mascot"), start)
+        # 마스코트별 Cartesia 음성 ID (None이면 CARTESIA_VOICE_ID 환경변수 기본값 사용)
+        mascot_voice_id = mascot.get("voice_id") if mascot else None
         daily_infos    = normalize_daily_infos_payload(start.get("context"))
         device_location = normalize_device_location_payload(start.get("deviceLocation") or start.get("device_location"))
         chat_history   = await load_chat_history(session_id) if session_id else []
@@ -595,6 +637,7 @@ async def ws_stream(websocket: WebSocket):
                             tts_language_code=tts_language_code,
                             trace_id=trace_id, safe_send=safe_send,
                             start_seq=idx, mark_final=False,
+                            voice_id=mascot_voice_id,
                         )
                         tts_total_ms = (tts_total_ms or 0) + tts_result["total_tts_ms"]
                         tts_sentence_count += tts_result["sentence_count"]
@@ -655,6 +698,7 @@ async def ws_stream(websocket: WebSocket):
                         sentences=sentences or [answer_text],
                         tts_language_code=tts_language_code,
                         trace_id=trace_id, safe_send=safe_send, start_seq=0,
+                        voice_id=mascot_voice_id,
                     )
                     tts_total_ms = tts_result["total_tts_ms"]
                     tts_sentence_count = tts_result["sentence_count"]
