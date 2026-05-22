@@ -82,3 +82,23 @@ async def clone_voice(
                 os.unlink(tmp_path)
             except OSError:
                 pass
+
+
+@router.delete("/{voice_id}", status_code=204, summary="보이스 삭제")
+async def delete_voice(voice_id: str):
+    """
+    Cartesia 커스텀 보이스를 삭제합니다.
+
+    Core 저장 실패 시 Spring BFF의 보상 처리에서 호출됩니다.
+    """
+    if cartesia_tts is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Cartesia TTS가 설정되지 않았습니다. CARTESIA_API_KEY 환경변수를 확인하세요.",
+        )
+    try:
+        await asyncio.to_thread(cartesia_tts._client.voices.delete, id=voice_id)
+        logger.info("보이스 삭제 완료 (보상 처리): voice_id=%s", voice_id)
+    except Exception as exc:
+        logger.error("보이스 삭제 실패: voice_id=%s, error=%s", voice_id, exc)
+        raise HTTPException(status_code=500, detail="보이스 삭제에 실패했습니다.") from exc
