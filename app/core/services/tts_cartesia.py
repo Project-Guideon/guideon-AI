@@ -93,15 +93,15 @@ class CartesiaTTS:
         return self._ws
 
     async def _reset_ws(self):
-        """연결을 폐기합니다. 오류 발생 시 호출합니다."""
+        """연결을 폐기합니다. 연결 수준 오류 발생 시 호출합니다."""
         async with self._ws_lock:
             ws = self._ws
             self._ws = None
         if ws is not None:
             try:
                 await ws.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Cartesia WebSocket close 오류 (무시): %s", exc)
             logger.info("Cartesia WebSocket 연결 폐기")
 
     async def synthesize_async(
@@ -132,7 +132,8 @@ class CartesiaTTS:
         if not vid:
             raise ValueError("voice_id가 지정되지 않았습니다. 마스코트 ttsVoiceId를 설정하세요.")
 
-        # 연결 오류 시 재연결 후 1회 재시도
+        # 연결 수준 오류 시에만 WS를 재생성하고 1회 재시도.
+        # 비연결 오류(잘못된 voice_id 등)에서 reset하면 동시 in-flight 스트림도 끊기므로 즉시 raise.
         for attempt in range(2):
             try:
                 ws = await self._get_ws()
@@ -151,11 +152,15 @@ class CartesiaTTS:
                         buf.extend(chunk["audio"])
                 return bytes(buf)
 
-            except Exception as exc:
+            except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
+                # 네트워크/소켓 수준 오류 → 연결 폐기 후 재시도
                 await self._reset_ws()
                 if attempt == 1:
                     raise
-                logger.warning("Cartesia WebSocket 오류, 재연결 후 재시도: %s", exc)
+                logger.warning("Cartesia WebSocket 연결 오류, 재연결 후 재시도: %s", exc)
+            except Exception:
+                # API·인증 오류 등 비연결 오류 → WS 유지, 즉시 raise
+                raise
 
     async def clone_voice_async(
         self,
