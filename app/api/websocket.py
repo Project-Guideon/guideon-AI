@@ -218,7 +218,7 @@ async def _synthesize_sentence(
             logger.warning("Cartesia TTS 실패 → Google TTS 폴백: %s", exc)
     # Google TTS는 동기 함수이므로 스레드풀에서 실행
     audio = await asyncio.to_thread(tts.synthesize, sentence, tts_language_code)
-    return audio, "mp3"
+    return audio, tts.get_audio_format()
 
 
 @traceable(name="ws_text_qa_invoke", run_type="chain")

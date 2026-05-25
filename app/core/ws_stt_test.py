@@ -39,8 +39,9 @@ def to_pcm16_mono_16k(wav_path: str):
         audio = audio.mean(axis=1)
 
     if sr != 16000:
-        import scipy.signal
-        audio = scipy.signal.resample(audio, int(len(audio) * 16000 / sr))
+        # scipy 없이 numpy 선형 보간으로 리샘플링 (테스트 스크립트 용도로 충분)
+        n = int(len(audio) * 16000 / sr)
+        audio = np.interp(np.linspace(0, len(audio) - 1, n), np.arange(len(audio)), audio)
         sr = 16000
 
     pcm16 = np.clip(audio, -1.0, 1.0)
