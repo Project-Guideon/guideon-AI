@@ -118,6 +118,7 @@ def make_answer_generate_node(llm: OpenAILLM):
             answer = _ERROR_MSG.get(user_language, _ERROR_MSG["en"])
 
         trace = append_trace_flow(state, "answer_generate")
+        trace["llm_model"] = llm.cfg.model
         trace["answer_generate"] = {
             "user_language": user_language,
             "chunks_used": len(chunks),
