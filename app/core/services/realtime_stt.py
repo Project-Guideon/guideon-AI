@@ -298,7 +298,7 @@ class OpenAIRealtimeSTT:
                             lang, transcript,
                         )
                         if transcript:
-                            detected = lang if lang else self._detect_lang_from_text(transcript)
+                            detected = self._detect_lang_from_text(transcript) if transcript else (lang or "ko")
                             yield STTStreamEvent(
                                 transcript=transcript,
                                 language_code=detected,
