@@ -10,7 +10,12 @@ _TOP_K_RETRY = 10             # 재시도 시 top_k
 # 답변이 이 문구를 포함하면 사실상 모른다는 뜻 → bad 판정
 _BAD_ANSWER_SIGNALS = [
     "관련 정보를 찾을 수 없",
+    "정보를 찾을 수 없",
+    "정보는 찾을 수 없",
+    "찾을 수 없지만",
+    "찾을 수 없어",
     "정보가 없",
+    "정보는 없",
     "I don't have",
     "I couldn't find",
     "no information",
