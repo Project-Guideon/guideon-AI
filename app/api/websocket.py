@@ -47,7 +47,7 @@ def _expand_numbers(text: str, lang: str) -> str:
             return _n2w(int(m.group()), lang=_N2W_LANG[lang])
         except Exception:
             return m.group()
-    return re.sub(r'\b\d+\b', _replace, text)
+    return re.sub(r'(?<!\d)\d+(?!\d)', _replace, text)
 
 
 # ──────────────────────────────────────────────
