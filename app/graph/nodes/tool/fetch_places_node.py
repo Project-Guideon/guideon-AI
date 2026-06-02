@@ -7,6 +7,7 @@ import requests
 from langsmith import traceable
 
 from app.graph.state import GraphState
+from app.graph.nodes.tool.navigation_node import _match_from_nearby
 
 CORE_BASE_URL = os.getenv("CORE_BASE_URL", "http://localhost:8080")
 
@@ -53,15 +54,26 @@ def fetch_places_node(state: GraphState) -> dict:
     """Spring Boot Core 의 places/nearby API 를 호출해서 nearby_places 를 채우는 노드.
 
     intent_gate 가 struct_db 로 분류한 뒤 실행된다.
-    - place_categories (top2, ex: ["TOILET", "INFO"]) 를 신뢰도 순으로 시도
-    - top1 카테고리로 조회해 결과가 있으면 사용, 비어 있으면 top2 로 재조회
-      (intent_gate 의 카테고리 오분류를 보정하기 위한 fallback)
+
+    [카테고리 fallback 기준]
+    - place_name_query 있음 (예: "샐러박스 어디야"):
+        카테고리 결과 안에 그 장소가 매칭되는지로 fallback 판단.
+        SHOP에서 9개 나와도 샐러박스가 없으면 OTHER 로 재조회.
+    - place_name_query 없음 (예: "화장실 어디야"):
+        결과 건수 기준. top1 결과 있으면 즉시 사용.
+
     - 카테고리가 없으면(place_categories=[]) 전체 카테고리 거리순 조회
     - 실패 시 nearby_places=[] 로 struct_db_node 에 진입 → RAG fallback
     """
     site_id: Optional[int] = state.get("site_id")
     device_id: Optional[str] = state.get("device_id")
     place_categories: List[str] = state.get("place_categories") or []
+    raw_place_name_query = state.get("place_name_query")
+    place_name_query: Optional[str] = (
+        raw_place_name_query.strip()
+        if isinstance(raw_place_name_query, str) and raw_place_name_query.strip()
+        else None
+    )
 
     trace = dict(state.get("trace") or {})
     flow = list(trace.get("_flow") or [])
@@ -78,6 +90,7 @@ def fetch_places_node(state: GraphState) -> dict:
     nearby_places: List[dict] = []
     used_category: Optional[str] = None
     last_error: Optional[str] = None
+    name_matched = False
 
     for idx, category in enumerate(categories_to_try):
         try:
@@ -93,18 +106,39 @@ def fetch_places_node(state: GraphState) -> dict:
                 )
             continue
 
-        if result:
-            nearby_places = result
-            used_category = category
-            break
+        if not result:
+            # 결과 0건 → 다음 카테고리 fallback
+            if idx + 1 < len(categories_to_try):
+                _log_category_fallback(
+                    from_category=category,
+                    to_category=categories_to_try[idx + 1],
+                    reason="empty_result",
+                )
+            continue
 
-        # 결과 없음 → 다음 카테고리 fallback
-        if idx + 1 < len(categories_to_try):
-            _log_category_fallback(
-                from_category=category,
-                to_category=categories_to_try[idx + 1],
-                reason="empty_result",
-            )
+        # 특정 장소 검색: 결과 안에 그 장소가 있는지로 fallback 판단
+        if place_name_query:
+            if _match_from_nearby(place_name_query, result):
+                nearby_places = result
+                used_category = category
+                name_matched = True
+                break
+            # 결과는 있지만 찾는 장소가 없음 → 첫 결과는 보관(LLM fallback용) 후 다음 카테고리
+            if not nearby_places:
+                nearby_places = result
+                used_category = category
+            if idx + 1 < len(categories_to_try):
+                _log_category_fallback(
+                    from_category=category,
+                    to_category=categories_to_try[idx + 1],
+                    reason="name_not_matched",
+                )
+            continue
+
+        # 카테고리 검색: 결과 있으면 즉시 사용
+        nearby_places = result
+        used_category = category
+        break
 
     if nearby_places:
         print(f"[fetch_places] 결과: used_category={used_category}, "
@@ -119,6 +153,8 @@ def fetch_places_node(state: GraphState) -> dict:
             "count": len(nearby_places),
             "categories": place_categories,
             "used_category": used_category,
+            "name_query": place_name_query,
+            "name_matched": name_matched,
         }
     else:
         # 모든 카테고리 조회 실패 또는 결과 0건
