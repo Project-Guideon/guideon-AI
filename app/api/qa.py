@@ -117,7 +117,7 @@ async def internal_qa(req: InternalQaRequest):
         "trace": {},
         "nearby_places": [],        # fetch_places_node 가 채움
         "daily_infos": daily_infos,
-        "place_category": None,
+        "place_categories": [],
         # struct_db_node 결과를 받기 위해 초기화
         "place_id": None,
         "emotion": "",
