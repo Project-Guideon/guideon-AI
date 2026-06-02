@@ -22,6 +22,12 @@ from app.graph.nodes.utils import (
 CORE_BASE_URL = os.getenv("CORE_BASE_URL", "http://localhost:8080")
 _SEARCH_THRESHOLD = 0.4   # 유사도 미달 시 nearby_places fallback
 _ALLOWED_EMOTIONS = {"GUIDING", "HAPPY", "THINKING", "SORRY", "EXCITED"}
+_MAP_GUIDE = {
+    "ko": "자세한 길찾기는 화면의 지도를 보고 따라가면 됩니다.",
+    "en": "For detailed directions, please follow the map on the screen.",
+    "ja": "詳しい道案内は、画面の地図をご覧ください。",
+    "zh": "详细路线请参考屏幕上的地图。",
+}
 
 
 # ── 내부 유틸 ──────────────────────────────────────────────────────────────────
@@ -178,13 +184,20 @@ def make_navigation_node(llm: OpenAILLM):
                 map_url = f"https://map.kakao.com/link/to/{enc_dest},{dest_lat},{dest_lng}"
 
             # ── 1-b. LLM 답변 생성 ────────────────────────────────────────
+            desc = place.get("description") or ""
+            desc_part = f"\n위치설명 및 부가 설명: {desc}" if desc else ""
+            dist = place.get("distanceM")
+            dist_str = f"\n거리: 약 {dist:.0f}m" if isinstance(dist, (int, float)) else ""
+
             if user_language == "ko":
                 system_msg = (
                     f"{persona_block}\n"
                     "규칙:\n"
                     "  - 아래 장소 정보를 바탕으로 1~2문장으로 위치를 안내하세요\n"
+                    "  - '위치설명 및 부가 설명'이 있으면 반드시 포함해서 안내하세요\n"
+                    "  - 목록에 없는 정보를 지어내지 마세요\n"
                     "  - 이모지나 특수문자는 사용하지 마세요\n\n"
-                    f"장소: {place_name} (카테고리: {place.get('category')})\n\n"
+                    f"장소: {place_name} (카테고리: {place.get('category')}){dist_str}{desc_part}\n\n"
                     "반드시 아래 JSON 형식으로만 응답하세요 (마크다운 없이):\n"
                     '{"answer": "자연어 답변", "emotion": "GUIDING"}'
                 )
@@ -194,8 +207,10 @@ def make_navigation_node(llm: OpenAILLM):
                     "Rules:\n"
                     f"  - CRITICAL: Your entire answer MUST be in {lang_name}.\n"
                     f"  - Respond in {lang_name}, 1-2 sentences\n"
+                    "  - If '위치설명' is provided, include that location detail in your answer\n"
+                    "  - Do not invent location details not in the provided info\n"
                     "  - No emoji, no special characters\n\n"
-                    f"Place: {place_name} (category: {place.get('category')})\n\n"
+                    f"Place: {place_name} (category: {place.get('category')}){dist_str}{desc_part}\n\n"
                     "Return ONLY valid JSON (no markdown):\n"
                     '{"answer": "...", "emotion": "GUIDING"}'
                 )
@@ -224,6 +239,9 @@ def make_navigation_node(llm: OpenAILLM):
                 error_msg = str(e)
 
             if answer_text:
+                if map_url:
+                    guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
+                    answer_text = f"{answer_text} {guide}"
                 trace["navigation"] = {
                     "status": "ok",
                     "method": method,
@@ -359,6 +377,10 @@ def make_navigation_node(llm: OpenAILLM):
         }
         if error_msg:
             trace["navigation"]["error"] = error_msg
+
+        if map_url:
+            guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
+            answer_text = f"{answer_text} {guide}"
 
         return {
             "answer_text": answer_text,
