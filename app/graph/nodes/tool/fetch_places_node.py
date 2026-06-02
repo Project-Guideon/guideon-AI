@@ -4,12 +4,25 @@ import os
 from typing import Any, List, Optional
 
 import requests
+from langsmith import traceable
 
 from app.graph.state import GraphState
 
 CORE_BASE_URL = os.getenv("CORE_BASE_URL", "http://localhost:8080")
 
 
+@traceable(name="fetch_places_category_fallback", run_type="tool")
+def _log_category_fallback(
+    from_category: Optional[str],
+    to_category: Optional[str],
+    reason: str,
+) -> dict:
+    """카테고리 fallback 발생 시 Langsmith에 스팬으로 기록합니다."""
+    print(f"[fetch_places] fallback: {from_category} → {to_category} (reason={reason})")
+    return {"from": from_category, "to": to_category, "reason": reason}
+
+
+@traceable(name="fetch_places_by_category", run_type="tool")
 def _fetch_by_category(
     site_id: Optional[int], device_id: str, category: Optional[str]
 ) -> List[dict]:
@@ -35,6 +48,7 @@ def _fetch_by_category(
     return []
 
 
+@traceable(name="fetch_places", run_type="tool")
 def fetch_places_node(state: GraphState) -> dict:
     """Spring Boot Core 의 places/nearby API 를 호출해서 nearby_places 를 채우는 노드.
 
@@ -65,18 +79,32 @@ def fetch_places_node(state: GraphState) -> dict:
     used_category: Optional[str] = None
     last_error: Optional[str] = None
 
-    for category in categories_to_try:
+    for idx, category in enumerate(categories_to_try):
         try:
             result = _fetch_by_category(site_id, device_id, category)
         except Exception as e:
             last_error = type(e).__name__
             print(f"[fetch_places] 오류: category={category}, {last_error}")
-            continue  # 다음 카테고리로 fallback
+            if idx > 0:
+                _log_category_fallback(
+                    from_category=categories_to_try[idx - 1],
+                    to_category=category,
+                    reason="api_error",
+                )
+            continue
 
         if result:
             nearby_places = result
             used_category = category
-            break  # 결과 있으면 더 이상 fallback 안 함
+            break
+
+        # 결과 없음 → 다음 카테고리 fallback
+        if idx + 1 < len(categories_to_try):
+            _log_category_fallback(
+                from_category=category,
+                to_category=categories_to_try[idx + 1],
+                reason="empty_result",
+            )
 
     if nearby_places:
         print(f"[fetch_places] 결과: used_category={used_category}, "
