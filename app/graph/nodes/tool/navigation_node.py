@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
@@ -37,6 +38,41 @@ def _kakao_walk_url(
         f"{enc_origin},{origin_lat},{origin_lng}/"
         f"{enc_dest},{dest_lat},{dest_lng}"
     )
+
+
+def _match_from_nearby(
+    query: str, nearby_places: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """이미 받아둔 nearby_places에서 장소명을 먼저 매칭한다.
+
+    거리순으로 가져온 목록이므로, 여기서 찾으면 pg_trgm 사이트 전체 검색을 생략한다.
+    정확/부분 문자열 매칭을 우선하고, 없으면 difflib 유사도가 threshold 이상인 항목을 채택한다.
+    """
+    if not query or not nearby_places:
+        return None
+
+    norm_q = query.replace(" ", "").lower()
+    best: Optional[Dict[str, Any]] = None
+    best_score = 0.0
+
+    for p in nearby_places:
+        name = p.get("name") or ""
+        norm_name = name.replace(" ", "").lower()
+        if not norm_name:
+            continue
+
+        # 정확 매칭 또는 부분 문자열 포함 → 즉시 채택
+        if norm_q == norm_name or norm_q in norm_name or norm_name in norm_q:
+            return p
+
+        score = SequenceMatcher(None, norm_q, norm_name).ratio()
+        if score > best_score:
+            best_score = score
+            best = p
+
+    if best is not None and best_score >= _SEARCH_THRESHOLD:
+        return best
+    return None
 
 
 def _search_place(site_id: int, query: str) -> Optional[Dict[str, Any]]:
@@ -95,12 +131,23 @@ def make_navigation_node(llm: OpenAILLM):
         )
 
         # ── 1. 특정 장소 검색 ──────────────────────────────────────────────
-        # place_name_query가 있을 때만 places/search 호출
+        # place_name_query가 있을 때만 검색 수행
         # (카테고리 질문: "화장실 어디야?" → place_name_query=null → 바로 nearby_places fallback)
+        #
+        # 검색 순서:
+        #   1) 이미 받아둔 nearby_places(거리순)에서 이름 매칭 → 있으면 pg_trgm 생략
+        #   2) 없으면 pg_trgm으로 사이트 전체 검색 (멀리 있는 장소 대응)
         place_name_query: Optional[str] = state.get("place_name_query")
         place: Optional[Dict[str, Any]] = None
-        if site_id and place_name_query:
-            place = _search_place(site_id, place_name_query)
+        place_search_method: Optional[str] = None
+        if place_name_query:
+            place = _match_from_nearby(place_name_query, nearby_places)
+            if place:
+                place_search_method = "nearby_match"
+            elif site_id:
+                place = _search_place(site_id, place_name_query)
+                if place:
+                    place_search_method = "pg_trgm"
 
         if place:
             # ── 1-a. 카카오맵 도보 URL 생성 ───────────────────────────────
@@ -171,6 +218,7 @@ def make_navigation_node(llm: OpenAILLM):
                 trace["navigation"] = {
                     "status": "ok",
                     "method": method,
+                    "search_method": place_search_method,
                     "place": place_name,
                     "similarity": place.get("similarity"),
                     "map_url": map_url,
