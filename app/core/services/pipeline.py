@@ -75,7 +75,7 @@ class TextPipeline:
             "nearby_places": [],
             "daily_infos": daily_infos or [],
             "device_location": device_location or {},
-            "place_category": None,
+            "place_categories": [],
             "place_id": None,
             "emotion": "",
             "category": "",

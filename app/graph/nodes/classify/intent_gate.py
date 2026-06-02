@@ -114,13 +114,18 @@ def make_intent_gate_node(llm: OpenAILLM):
                     "\n"
                     "Respond ONLY with valid JSON. Example:\n"
                     '{"actual_language": "ja", "corrected_text": "경복궁の観覧時間は何時から何時までですか", '
-                    '"ranking": ["rag", "struct_db", "smalltalk", "event"], "place_category": null, '
+                    '"ranking": ["rag", "struct_db", "smalltalk", "event"], "place_categories": [], '
                     '"place_name_query": null, "retrieval_query_ko": "경복궁 관람 시간"}\n'
                     "\n"
                     "actual_language: ISO 639-1 code — ko, en, ja, or zh.\n"
                     "The first item in ranking is the most likely intent. Include all 4 categories.\n"
-                    "place_category: set ONLY when top intent is struct_db, otherwise null.\n"
-                    "  Possible values: TOILET, TICKET, RESTAURANT, SHOP, INFO, ATTRACTION, PARKING, OTHER\n"
+                    "place_categories: set ONLY when top intent is struct_db, otherwise [].\n"
+                    "  An ARRAY of EXACTLY 2 categories, ordered by confidence (most likely FIRST, second SECOND).\n"
+                    "  - The 1st is your best guess; the 2nd is a fallback used only when the 1st has no places.\n"
+                    "  - ALWAYS provide a 2nd category even if the 1st seems obvious — pick the next most plausible one.\n"
+                    "    (e.g., '먹을 곳' → [\"RESTAURANT\", \"SHOP\"], '뭐 살 데' → [\"SHOP\", \"RESTAURANT\"],\n"
+                    "     '안내소' → [\"INFO\", \"TICKET\"], '화장실' → [\"TOILET\", \"INFO\"], '주차' → [\"PARKING\", \"INFO\"])\n"
+                    "  Allowed values: TOILET, TICKET, RESTAURANT, SHOP, INFO, ATTRACTION, PARKING, OTHER\n"
                     "place_name_query: specific named place in Korean, or null.\n"
                     "retrieval_query_ko: ALWAYS required, Korean keywords only.\n"
                     "DO NOT generate any answer or explanation."
@@ -135,6 +140,7 @@ def make_intent_gate_node(llm: OpenAILLM):
         retrieval_query_ko = text  # 기본값: 원문 그대로
         actual_language = stt_language  # 기본값: STT 감지 언어 그대로
         place_name_query: Optional[str] = None
+        place_categories: list = []
         try:
             raw = llm.chat(messages, max_tokens=300)
             parsed = json.loads(raw)
@@ -157,13 +163,20 @@ def make_intent_gate_node(llm: OpenAILLM):
                 retrieval_query_ko = rq.strip()
 
             ranking = parsed.get("ranking", _DEFAULT_RANKING)
-            # 1순위가 struct_db일 때만 place_category 적용, 허용 enum 외 값은 None
-            raw_category = parsed.get("place_category")
-            place_category = (
-                raw_category.upper()
-                if isinstance(raw_category, str) and raw_category.upper() in _ALLOWED_PLACE_CATEGORIES
-                else None
-            )
+            # 1순위가 struct_db일 때만 place_categories 적용 (top2, 신뢰도 순)
+            # 허용 enum 외 값/중복 제거, 최대 2개. 단일 문자열로 와도 허용.
+            raw_categories = parsed.get("place_categories")
+            if isinstance(raw_categories, str):
+                raw_categories = [raw_categories]
+            place_categories = []
+            if isinstance(raw_categories, list):
+                seen_cat: set[str] = set()
+                for c in raw_categories:
+                    cu = c.strip().upper() if isinstance(c, str) else ""
+                    if cu in _ALLOWED_PLACE_CATEGORIES and cu not in seen_cat:
+                        seen_cat.add(cu)
+                        place_categories.append(cu)
+                place_categories = place_categories[:2]  # top2 상한
 
             # 특정 장소명 추출 (struct_db 1순위일 때만 유효)
             pnq = parsed.get("place_name_query")
@@ -189,25 +202,25 @@ def make_intent_gate_node(llm: OpenAILLM):
                     method = "llm_partial_fix"
         except (json.JSONDecodeError, ValueError) as e:
             ranking = _DEFAULT_RANKING
-            place_category = None
+            place_categories = []
             place_name_query = None
             method = "llm_fallback_invalid_json"
             error = str(e)
         except (APIConnectionError, APITimeoutError) as e:
             ranking = _DEFAULT_RANKING
-            place_category = None
+            place_categories = []
             place_name_query = None
             method = "llm_fallback_connection_error"
             error = str(e)
         except RateLimitError as e:
             ranking = _DEFAULT_RANKING
-            place_category = None
+            place_categories = []
             place_name_query = None
             method = "llm_fallback_rate_limit"
             error = str(e)
         except APIError as e:
             ranking = _DEFAULT_RANKING
-            place_category = None
+            place_categories = []
             place_name_query = None
             method = "llm_fallback_api_error"
             error = f"{e.__class__.__name__}: {e}"
@@ -225,7 +238,7 @@ def make_intent_gate_node(llm: OpenAILLM):
             "language_corrected": actual_language != stt_language,
             "retrieval_query_ko": retrieval_query_ko,
             "ranking": ranking,
-            "place_category": place_category,
+            "place_categories": place_categories,
             "place_name_query": place_name_query,
             "method": method,
         }
@@ -235,15 +248,15 @@ def make_intent_gate_node(llm: OpenAILLM):
         # 상위 N개 의도만 시도
         ranking = ranking[:_MAX_INTENTS]
 
-        # 1순위가 struct_db가 아니면 place_category, place_name_query 무효화
+        # 1순위가 struct_db가 아니면 place_categories, place_name_query 무효화
         if ranking[0] != "struct_db":
-            place_category = None
+            place_categories = []
             place_name_query = None
 
         return {
             "intent_ranking": ranking,
             "current_intent_index": 0,
-            "place_category": place_category,
+            "place_categories": place_categories,
             "place_name_query": place_name_query,
             "normalized_text": corrected_text,
             "retrieval_query_ko": retrieval_query_ko,

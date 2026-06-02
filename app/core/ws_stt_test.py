@@ -11,7 +11,7 @@ import time
 #WS_URL = "ws://localhost:8082/ws/v1/kiosk/stt?sessionId=b5e95ed7-aac2-483b-aa03-71b3b66fa5d6&siteId=5&languageCode=ko-KR&token=kiosk-south-01-test"
 # 스크립트 위치 기준 상대 경로로 고정 (실행 디렉터리와 무관)
 WS_URL = "ws://localhost:8000/ws/stream"
-WAV_PATH = r"C:\Users\ty532\IdeaProjects\guideon-AI\중국어3.wav"
+WAV_PATH = r"C:\Users\문현우\Project_Guideon\guideon-AI\중국어3.wav"
 
 # Cartesia 테스트용 voice_id (None이면 서버 환경변수 기본값 사용)
 CARTESIA_VOICE_ID = "6fd8e3fc-a59d-479f-a072-b4f7e8284a78"
