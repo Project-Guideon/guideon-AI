@@ -48,16 +48,20 @@ def _match_from_nearby(
     거리순으로 가져온 목록이므로, 여기서 찾으면 pg_trgm 사이트 전체 검색을 생략한다.
     정확/부분 문자열 매칭을 우선하고, 없으면 difflib 유사도가 threshold 이상인 항목을 채택한다.
     """
-    if not query or not nearby_places:
+    if not nearby_places:
         return None
 
-    norm_q = query.replace(" ", "").lower()
+    # 공백 제거 후 빈 문자열이면 매칭 생략 (빈 query가 부분 매칭으로 오인되는 것 방지)
+    norm_q = "".join(query.split()).lower()
+    if not norm_q:
+        return None
+
     best: Optional[Dict[str, Any]] = None
     best_score = 0.0
 
     for p in nearby_places:
         name = p.get("name") or ""
-        norm_name = name.replace(" ", "").lower()
+        norm_name = "".join(name.split()).lower()
         if not norm_name:
             continue
 
@@ -137,7 +141,12 @@ def make_navigation_node(llm: OpenAILLM):
         # 검색 순서:
         #   1) 이미 받아둔 nearby_places(거리순)에서 이름 매칭 → 있으면 pg_trgm 생략
         #   2) 없으면 pg_trgm으로 사이트 전체 검색 (멀리 있는 장소 대응)
-        place_name_query: Optional[str] = state.get("place_name_query")
+        raw_place_name_query = state.get("place_name_query")
+        place_name_query: Optional[str] = (
+            raw_place_name_query.strip()
+            if isinstance(raw_place_name_query, str) and raw_place_name_query.strip()
+            else None
+        )
         place: Optional[Dict[str, Any]] = None
         place_search_method: Optional[str] = None
         if place_name_query:
