@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -238,10 +239,10 @@ def make_navigation_node(llm: OpenAILLM):
                     "  - If '위치설명' is provided, include that location detail in your answer\n"
                     "  - Do not invent location details not in the provided info\n"
                     "  - No emoji, no special characters\n"
-                    "  - If the persona has a slogan or catchphrase, put it in sign_off, not in answer\n\n"
+                    f"  - If the persona has a slogan or catchphrase, translate it into {lang_name} and put it in sign_off (NOT in Korean).\n\n"
                     f"Place: {place_name} (category: {place.get('category')}){dist_str}{desc_part}\n\n"
                     "Return ONLY valid JSON (no markdown):\n"
-                    '{"answer": "...", "sign_off": "slogan/catchphrase or empty string", "emotion": "GUIDING"}'
+                    '{"answer": "...", "sign_off": "slogan/catchphrase in target language or empty string", "emotion": "GUIDING"}'
                 )
 
             messages = build_messages(state, system_msg, text)
@@ -280,8 +281,8 @@ def make_navigation_node(llm: OpenAILLM):
                 error_msg = str(e)
 
             if answer_text:
-                if sign_off and answer_text.endswith(sign_off):
-                    answer_text = answer_text[:-len(sign_off)].rstrip()
+                if sign_off and sign_off in answer_text:
+                    answer_text = re.sub(r'\s+', ' ', re.sub(r'(?<!\S)' + re.escape(sign_off) + r'(?!\S)', '', answer_text)).strip()
                 if map_url:
                     guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
                     answer_text = f"{answer_text} {guide}"
@@ -355,10 +356,10 @@ def make_navigation_node(llm: OpenAILLM):
                 "  - Prioritize same-zone (✓ 같은 구역) places and shorter distances\n"
                 "  - Mention the place name and distance\n"
                 "  - No emoji, no special characters\n"
-                "  - If the persona has a slogan or catchphrase, put it in sign_off, not in answer\n\n"
+                f"  - If the persona has a slogan or catchphrase, translate it into {lang_name} and put it in sign_off (NOT in Korean).\n\n"
                 f"Nearby places:\n{places_text}\n\n"
                 "Return ONLY valid JSON (no markdown):\n"
-                '{"answer": "...", "sign_off": "slogan/catchphrase or empty string", '
+                '{"answer": "...", "sign_off": "slogan/catchphrase in target language or empty string", '
                 '"place_id": <placeId or null>, "emotion": "GUIDING", "category": "DIRECTION"}'
             )
 
@@ -444,8 +445,8 @@ def make_navigation_node(llm: OpenAILLM):
         if error_msg:
             trace["navigation"]["error"] = error_msg
 
-        if sign_off and answer_text.endswith(sign_off):
-            answer_text = answer_text[:-len(sign_off)].rstrip()
+        if sign_off and sign_off in answer_text:
+            answer_text = re.sub(r'\s+', ' ', re.sub(r'(?<!\S)' + re.escape(sign_off) + r'(?!\S)', '', answer_text)).strip()
         if map_url:
             guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
             answer_text = f"{answer_text} {guide}"
