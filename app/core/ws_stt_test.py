@@ -10,11 +10,13 @@ import time
 
 #WS_URL = "ws://localhost:8082/ws/v1/kiosk/stt?sessionId=b5e95ed7-aac2-483b-aa03-71b3b66fa5d6&siteId=5&languageCode=ko-KR&token=kiosk-south-01-test"
 # 스크립트 위치 기준 상대 경로로 고정 (실행 디렉터리와 무관)
-WS_URL = "ws://localhost:8000/ws/stream"
+WS_URL = "wss://realguideon.duckdns.org/ws/stream" 
+#서버:wss://realguideon.duckdns.org/ws/stream
+#로컬:ws://localhost:8000/ws/stream
 WAV_PATH = r"C:\Users\문현우\Project_Guideon\guideon-AI\중국어3.wav"
 
 # Cartesia 테스트용 voice_id (None이면 서버 환경변수 기본값 사용)
-CARTESIA_VOICE_ID = "6fd8e3fc-a59d-479f-a072-b4f7e8284a78"
+CARTESIA_VOICE_ID = "27b540b2-2135-4f70-b50d-e66111357da7"
 
 CHUNK_MS = 400
 SAVE_TTS_AUDIO = True
@@ -26,7 +28,7 @@ PCM_SAMPWIDTH = 2  # 16-bit = 2 bytes
 
 START_PAYLOAD = {
     "type": "start",
-    "siteId": 2,
+    "siteId": 3,
     "language_code": "auto",  # 클라이언트 언어 감지 → 서버에서 실제 감지된 언어로 profile 갱신
     "ttsVoiceId": CARTESIA_VOICE_ID,  # None이면 서버 기본 voice 사용
 }
@@ -39,9 +41,8 @@ def to_pcm16_mono_16k(wav_path: str):
         audio = audio.mean(axis=1)
 
     if sr != 16000:
-        # scipy 없이 numpy 선형 보간으로 리샘플링 (테스트 스크립트 용도로 충분)
-        n = int(len(audio) * 16000 / sr)
-        audio = np.interp(np.linspace(0, len(audio) - 1, n), np.arange(len(audio)), audio)
+        import scipy.signal
+        audio = scipy.signal.resample(audio, int(len(audio) * 16000 / sr))
         sr = 16000
 
     pcm16 = np.clip(audio, -1.0, 1.0)
