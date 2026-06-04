@@ -238,10 +238,10 @@ def make_navigation_node(llm: OpenAILLM):
                     "  - If '위치설명' is provided, include that location detail in your answer\n"
                     "  - Do not invent location details not in the provided info\n"
                     "  - No emoji, no special characters\n"
-                    "  - If the persona has a slogan or catchphrase, put it in sign_off, not in answer\n\n"
+                    f"  - If the persona has a slogan or catchphrase, translate it into {lang_name} and put it in sign_off (NOT in Korean).\n\n"
                     f"Place: {place_name} (category: {place.get('category')}){dist_str}{desc_part}\n\n"
                     "Return ONLY valid JSON (no markdown):\n"
-                    '{"answer": "...", "sign_off": "slogan/catchphrase or empty string", "emotion": "GUIDING"}'
+                    '{"answer": "...", "sign_off": "slogan/catchphrase in target language or empty string", "emotion": "GUIDING"}'
                 )
 
             messages = build_messages(state, system_msg, text)
@@ -355,10 +355,10 @@ def make_navigation_node(llm: OpenAILLM):
                 "  - Prioritize same-zone (✓ 같은 구역) places and shorter distances\n"
                 "  - Mention the place name and distance\n"
                 "  - No emoji, no special characters\n"
-                "  - If the persona has a slogan or catchphrase, put it in sign_off, not in answer\n\n"
+                f"  - If the persona has a slogan or catchphrase, translate it into {lang_name} and put it in sign_off (NOT in Korean).\n\n"
                 f"Nearby places:\n{places_text}\n\n"
                 "Return ONLY valid JSON (no markdown):\n"
-                '{"answer": "...", "sign_off": "slogan/catchphrase or empty string", '
+                '{"answer": "...", "sign_off": "slogan/catchphrase in target language or empty string", '
                 '"place_id": <placeId or null>, "emotion": "GUIDING", "category": "DIRECTION"}'
             )
 
