@@ -258,7 +258,10 @@ class OpenAIRealtimeSTT:
 
             cumulative = ""
 
+            send_error: Optional[Exception] = None
+
             async def _send_audio():
+                nonlocal send_error
                 try:
                     while True:
                         chunk = await audio_q.get()
@@ -272,6 +275,8 @@ class OpenAIRealtimeSTT:
                     await conn.input_audio_buffer.commit()
                 except Exception as exc:
                     logger.warning("realtime_stt send error: %s", exc)
+                    send_error = exc
+                    await conn.close()
 
             send_task = asyncio.create_task(_send_audio())
 
@@ -310,6 +315,9 @@ class OpenAIRealtimeSTT:
                     elif t == "error":
                         err = getattr(event, "error", str(event))
                         raise RuntimeError(f"Realtime API error: {err}")
+
+                if send_error is not None:
+                    raise send_error
 
             finally:
                 send_task.cancel()
