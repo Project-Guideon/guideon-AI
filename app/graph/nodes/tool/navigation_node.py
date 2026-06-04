@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -281,7 +282,7 @@ def make_navigation_node(llm: OpenAILLM):
 
             if answer_text:
                 if sign_off and sign_off in answer_text:
-                    answer_text = answer_text.replace(sign_off, "").strip()
+                    answer_text = re.sub(r'\s+', ' ', re.sub(r'(?<!\S)' + re.escape(sign_off) + r'(?!\S)', '', answer_text)).strip()
                 if map_url:
                     guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
                     answer_text = f"{answer_text} {guide}"
