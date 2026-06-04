@@ -446,7 +446,7 @@ def make_navigation_node(llm: OpenAILLM):
             trace["navigation"]["error"] = error_msg
 
         if sign_off and sign_off in answer_text:
-            answer_text = answer_text.replace(sign_off, "").strip()
+            answer_text = re.sub(r'\s+', ' ', re.sub(r'(?<!\S)' + re.escape(sign_off) + r'(?!\S)', '', answer_text)).strip()
         if map_url:
             guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
             answer_text = f"{answer_text} {guide}"
