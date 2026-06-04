@@ -280,8 +280,8 @@ def make_navigation_node(llm: OpenAILLM):
                 error_msg = str(e)
 
             if answer_text:
-                if sign_off and answer_text.endswith(sign_off):
-                    answer_text = answer_text[:-len(sign_off)].rstrip()
+                if sign_off and sign_off in answer_text:
+                    answer_text = answer_text.replace(sign_off, "").strip()
                 if map_url:
                     guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
                     answer_text = f"{answer_text} {guide}"
@@ -444,8 +444,8 @@ def make_navigation_node(llm: OpenAILLM):
         if error_msg:
             trace["navigation"]["error"] = error_msg
 
-        if sign_off and answer_text.endswith(sign_off):
-            answer_text = answer_text[:-len(sign_off)].rstrip()
+        if sign_off and sign_off in answer_text:
+            answer_text = answer_text.replace(sign_off, "").strip()
         if map_url:
             guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
             answer_text = f"{answer_text} {guide}"
