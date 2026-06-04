@@ -438,7 +438,19 @@ async def ws_stream(websocket: WebSocket):
             site_id        = int(start.get("siteId") or start.get("site_id") or 1)
             _client_lang   = start.get("language") or start.get("language_code") or "auto"
             stt_language   = _client_lang  # 하위 호환 (ls_trace inputs 용)
-            sample_rate_hz = int(start.get("sampleRateHz") or start.get("sample_rate_hz") or 16000)
+            _raw_sr = start.get("sampleRateHz") or start.get("sample_rate_hz") or 16000
+            sample_rate_hz = int(_raw_sr)
+            _ALLOWED_SAMPLE_RATES = {8000, 16000, 22050, 24000, 44100, 48000}
+            if sample_rate_hz not in _ALLOWED_SAMPLE_RATES:
+                await safe_send({
+                    "type": "error", "code": "BAD_REQUEST",
+                    "message": (
+                        f"sampleRateHz={sample_rate_hz} is not supported. "
+                        f"Allowed values: {sorted(_ALLOWED_SAMPLE_RATES)}"
+                    ),
+                    "trace_id": trace_id,
+                })
+                return
             device_id_raw  = start.get("deviceId") or start.get("device_id")
             device_id      = str(device_id_raw).strip() if device_id_raw is not None else None
             device_id      = device_id or None
