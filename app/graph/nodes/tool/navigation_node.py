@@ -196,10 +196,11 @@ def make_navigation_node(llm: OpenAILLM):
                     "  - 아래 장소 정보를 바탕으로 1~2문장으로 위치를 안내하세요\n"
                     "  - '위치설명 및 부가 설명'이 있으면 반드시 포함해서 안내하세요\n"
                     "  - 목록에 없는 정보를 지어내지 마세요\n"
-                    "  - 이모지나 특수문자는 사용하지 마세요\n\n"
+                    "  - 이모지나 특수문자는 사용하지 마세요\n"
+                    "  - 마스코트의 슬로건이나 개성 문구가 있다면 answer가 아닌 sign_off에 넣으세요\n\n"
                     f"장소: {place_name} (카테고리: {place.get('category')}){dist_str}{desc_part}\n\n"
                     "반드시 아래 JSON 형식으로만 응답하세요 (마크다운 없이):\n"
-                    '{"answer": "자연어 답변", "emotion": "GUIDING"}'
+                    '{"answer": "위치 안내 문구만", "sign_off": "슬로건/개성 문구 (없으면 빈 문자열)", "emotion": "GUIDING"}'
                 )
             else:
                 system_msg = (
@@ -209,10 +210,11 @@ def make_navigation_node(llm: OpenAILLM):
                     f"  - Respond in {lang_name}, 1-2 sentences\n"
                     "  - If '위치설명' is provided, include that location detail in your answer\n"
                     "  - Do not invent location details not in the provided info\n"
-                    "  - No emoji, no special characters\n\n"
+                    "  - No emoji, no special characters\n"
+                    "  - If the persona has a slogan or catchphrase, put it in sign_off, not in answer\n\n"
                     f"Place: {place_name} (category: {place.get('category')}){dist_str}{desc_part}\n\n"
                     "Return ONLY valid JSON (no markdown):\n"
-                    '{"answer": "...", "emotion": "GUIDING"}'
+                    '{"answer": "...", "sign_off": "slogan/catchphrase or empty string", "emotion": "GUIDING"}'
                 )
 
             messages = build_messages(state, system_msg, text)
@@ -228,20 +230,28 @@ def make_navigation_node(llm: OpenAILLM):
                 if not isinstance(parsed, dict):
                     raise ValueError("LLM response must be a JSON object")
                 answer_text = parsed.get("answer", "") if isinstance(parsed.get("answer"), str) else ""
+                sign_off = parsed.get("sign_off", "") if isinstance(parsed.get("sign_off"), str) else ""
+                sign_off = sign_off.strip()
                 raw_emotion = parsed.get("emotion", "GUIDING")
                 emotion = raw_emotion if raw_emotion in _ALLOWED_EMOTIONS else "GUIDING"
             except (json.JSONDecodeError, ValueError, TypeError) as e:
                 answer_text = raw
+                sign_off = ""
                 method = "llm_raw_fallback"
                 error_msg = str(e)
             except (APIConnectionError, APITimeoutError, RateLimitError, APIError) as e:
+                sign_off = ""
                 method = "llm_api_error"
                 error_msg = str(e)
 
             if answer_text:
+                if sign_off and answer_text.endswith(sign_off):
+                    answer_text = answer_text[:-len(sign_off)].rstrip()
                 if map_url:
                     guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
                     answer_text = f"{answer_text} {guide}"
+                if sign_off:
+                    answer_text = f"{answer_text} {sign_off}"
                 trace["navigation"] = {
                     "status": "ok",
                     "method": method,
@@ -293,11 +303,12 @@ def make_navigation_node(llm: OpenAILLM):
                 "  - 아래 장소 목록만 참고하세요 (장소를 지어내지 마세요)\n"
                 "  - 같은 구역(✓ 같은 구역) 장소를 우선, 가까운 순서로 안내하세요\n"
                 "  - 장소 이름과 거리를 포함해 1~2문장으로 답하세요\n"
-                "  - 이모지나 특수문자는 사용하지 마세요\n\n"
+                "  - 이모지나 특수문자는 사용하지 마세요\n"
+                "  - 마스코트의 슬로건이나 개성 문구가 있다면 answer가 아닌 sign_off에 넣으세요\n\n"
                 f"주변 장소 목록:\n{places_text}\n\n"
                 "반드시 아래 JSON 형식으로만 응답하세요 (마크다운 없이):\n"
-                '{"answer": "자연어 답변", "place_id": <placeId 또는 null>, '
-                '"emotion": "GUIDING", "category": "DIRECTION"}'
+                '{"answer": "위치 안내 문구만", "sign_off": "슬로건/개성 문구 (없으면 빈 문자열)", '
+                '"place_id": <placeId 또는 null>, "emotion": "GUIDING", "category": "DIRECTION"}'
             )
         else:
             system_msg = (
@@ -308,11 +319,12 @@ def make_navigation_node(llm: OpenAILLM):
                 "  - Use ONLY the provided nearby places list (do not invent places)\n"
                 "  - Prioritize same-zone (✓ 같은 구역) places and shorter distances\n"
                 "  - Mention the place name and distance\n"
-                "  - No emoji, no special characters\n\n"
+                "  - No emoji, no special characters\n"
+                "  - If the persona has a slogan or catchphrase, put it in sign_off, not in answer\n\n"
                 f"Nearby places:\n{places_text}\n\n"
                 "Return ONLY valid JSON (no markdown):\n"
-                '{"answer": "...", "place_id": <placeId or null>, '
-                '"emotion": "GUIDING", "category": "DIRECTION"}'
+                '{"answer": "...", "sign_off": "slogan/catchphrase or empty string", '
+                '"place_id": <placeId or null>, "emotion": "GUIDING", "category": "DIRECTION"}'
             )
 
         messages = build_messages(state, system_msg, text)
@@ -329,6 +341,8 @@ def make_navigation_node(llm: OpenAILLM):
             if not isinstance(parsed, dict):
                 raise ValueError("LLM response must be a JSON object")
             answer_text = parsed.get("answer", "") if isinstance(parsed.get("answer"), str) else ""
+            sign_off = parsed.get("sign_off", "") if isinstance(parsed.get("sign_off"), str) else ""
+            sign_off = sign_off.strip()
             raw_place_id = parsed.get("place_id")
             if isinstance(raw_place_id, bool) or raw_place_id is None:
                 place_id = None
@@ -340,9 +354,11 @@ def make_navigation_node(llm: OpenAILLM):
             emotion = raw_emotion if raw_emotion in _ALLOWED_EMOTIONS else "GUIDING"
         except (json.JSONDecodeError, ValueError, TypeError) as e:
             answer_text = raw
+            sign_off = ""
             method = "llm_raw_fallback"
             error_msg = str(e)
         except (APIConnectionError, APITimeoutError, RateLimitError, APIError) as e:
+            sign_off = ""
             method = "llm_api_error"
             error_msg = str(e)
 
@@ -378,9 +394,13 @@ def make_navigation_node(llm: OpenAILLM):
         if error_msg:
             trace["navigation"]["error"] = error_msg
 
+        if sign_off and answer_text.endswith(sign_off):
+            answer_text = answer_text[:-len(sign_off)].rstrip()
         if map_url:
             guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
             answer_text = f"{answer_text} {guide}"
+        if sign_off:
+            answer_text = f"{answer_text} {sign_off}"
 
         return {
             "answer_text": answer_text,
