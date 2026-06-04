@@ -238,11 +238,11 @@ class OpenAIRealtimeSTT:
         )
 
         async with async_client.realtime.connect(model=self.config.model) as conn:
-            # transcription 전용 세션: type="transcription" 필수 (OpenAI Realtime Transcription API)
             # - audio.input.turn_detection: None → 수동 commit 으로 전사 트리거
             # - response.create 를 보내지 않으므로 LLM 응답 생성 없음
             await conn.session.update(session={
-                "type": "transcription",
+                "type": "realtime",
+                "output_modalities": ["text"],
                 "audio": {
                     "input": {
                         "format": {"type": "audio/pcm", "rate": 24000},
