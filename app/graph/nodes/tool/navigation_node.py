@@ -22,12 +22,39 @@ from app.graph.nodes.utils import (
 CORE_BASE_URL = os.getenv("CORE_BASE_URL", "http://localhost:8080")
 _SEARCH_THRESHOLD = 0.4   # 유사도 미달 시 nearby_places fallback
 _ALLOWED_EMOTIONS = {"GUIDING", "HAPPY", "THINKING", "SORRY", "EXCITED"}
+_ANSWER_PLACEHOLDERS = frozenset({"위치 안내 문구만", "..."})
 _MAP_GUIDE = {
     "ko": "자세한 길찾기는 화면의 지도를 보고 따라가면 됩니다.",
     "en": "For detailed directions, please follow the map on the screen.",
     "ja": "詳しい道案内は、画面の地図をご覧ください。",
     "zh": "详细路线请参考屏幕上的地图。",
 }
+
+
+def _extract_json_from_mixed(text: str) -> Optional[Dict[str, Any]]:
+    """자연어+JSON 혼합 응답에서 JSON 객체만 추출한다."""
+    start = text.find('{')
+    if start == -1:
+        return None
+    depth = 0
+    for i, ch in enumerate(text[start:], start):
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                try:
+                    parsed = json.loads(text[start:i + 1])
+                    return parsed if isinstance(parsed, dict) else None
+                except (json.JSONDecodeError, ValueError):
+                    return None
+    return None
+
+
+def _text_before_json(text: str) -> str:
+    """JSON 블록 앞의 자연어 부분만 반환한다."""
+    idx = text.find('{')
+    return text[:idx].strip() if idx != -1 else text.strip()
 
 
 # ── 내부 유틸 ──────────────────────────────────────────────────────────────────
@@ -235,9 +262,17 @@ def make_navigation_node(llm: OpenAILLM):
                 raw_emotion = parsed.get("emotion", "GUIDING")
                 emotion = raw_emotion if raw_emotion in _ALLOWED_EMOTIONS else "GUIDING"
             except (json.JSONDecodeError, ValueError, TypeError) as e:
-                answer_text = raw
-                sign_off = ""
-                method = "llm_raw_fallback"
+                extracted = _extract_json_from_mixed(raw)
+                if extracted and isinstance(extracted.get("answer"), str) and extracted["answer"] and extracted["answer"] not in _ANSWER_PLACEHOLDERS:
+                    answer_text = extracted["answer"]
+                    sign_off = (extracted.get("sign_off") or "").strip()
+                    raw_emotion = extracted.get("emotion", "GUIDING")
+                    emotion = raw_emotion if raw_emotion in _ALLOWED_EMOTIONS else "GUIDING"
+                    method = "llm_json_extracted"
+                else:
+                    answer_text = _text_before_json(raw)
+                    sign_off = ""
+                    method = "llm_raw_fallback"
                 error_msg = str(e)
             except (APIConnectionError, APITimeoutError, RateLimitError, APIError) as e:
                 sign_off = ""
@@ -353,9 +388,24 @@ def make_navigation_node(llm: OpenAILLM):
             raw_emotion = parsed.get("emotion", "GUIDING")
             emotion = raw_emotion if raw_emotion in _ALLOWED_EMOTIONS else "GUIDING"
         except (json.JSONDecodeError, ValueError, TypeError) as e:
-            answer_text = raw
-            sign_off = ""
-            method = "llm_raw_fallback"
+            extracted = _extract_json_from_mixed(raw)
+            if extracted and isinstance(extracted.get("answer"), str) and extracted["answer"] and extracted["answer"] not in _ANSWER_PLACEHOLDERS:
+                answer_text = extracted["answer"]
+                sign_off = (extracted.get("sign_off") or "").strip()
+                raw_place_id_ex = extracted.get("place_id")
+                if isinstance(raw_place_id_ex, bool) or raw_place_id_ex is None:
+                    place_id = None
+                elif isinstance(raw_place_id_ex, int):
+                    place_id = raw_place_id_ex
+                elif isinstance(raw_place_id_ex, float) and raw_place_id_ex.is_integer():
+                    place_id = int(raw_place_id_ex)
+                raw_emotion = extracted.get("emotion", "GUIDING")
+                emotion = raw_emotion if raw_emotion in _ALLOWED_EMOTIONS else "GUIDING"
+                method = "llm_json_extracted"
+            else:
+                answer_text = _text_before_json(raw)
+                sign_off = ""
+                method = "llm_raw_fallback"
             error_msg = str(e)
         except (APIConnectionError, APITimeoutError, RateLimitError, APIError) as e:
             sign_off = ""
