@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
@@ -21,6 +22,12 @@ from app.graph.nodes.utils import (
 CORE_BASE_URL = os.getenv("CORE_BASE_URL", "http://localhost:8080")
 _SEARCH_THRESHOLD = 0.4   # 유사도 미달 시 nearby_places fallback
 _ALLOWED_EMOTIONS = {"GUIDING", "HAPPY", "THINKING", "SORRY", "EXCITED"}
+_MAP_GUIDE = {
+    "ko": "자세한 길찾기는 화면의 지도를 보고 따라가면 됩니다.",
+    "en": "For detailed directions, please follow the map on the screen.",
+    "ja": "詳しい道案内は、画面の地図をご覧ください。",
+    "zh": "详细路线请参考屏幕上的地图。",
+}
 
 
 # ── 내부 유틸 ──────────────────────────────────────────────────────────────────
@@ -37,6 +44,45 @@ def _kakao_walk_url(
         f"{enc_origin},{origin_lat},{origin_lng}/"
         f"{enc_dest},{dest_lat},{dest_lng}"
     )
+
+
+def _match_from_nearby(
+    query: str, nearby_places: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """이미 받아둔 nearby_places에서 장소명을 먼저 매칭한다.
+
+    거리순으로 가져온 목록이므로, 여기서 찾으면 pg_trgm 사이트 전체 검색을 생략한다.
+    정확/부분 문자열 매칭을 우선하고, 없으면 difflib 유사도가 threshold 이상인 항목을 채택한다.
+    """
+    if not nearby_places:
+        return None
+
+    # 공백 제거 후 빈 문자열이면 매칭 생략 (빈 query가 부분 매칭으로 오인되는 것 방지)
+    norm_q = "".join(query.split()).lower()
+    if not norm_q:
+        return None
+
+    best: Optional[Dict[str, Any]] = None
+    best_score = 0.0
+
+    for p in nearby_places:
+        name = p.get("name") or ""
+        norm_name = "".join(name.split()).lower()
+        if not norm_name:
+            continue
+
+        # 정확 매칭 또는 부분 문자열 포함 → 즉시 채택
+        if norm_q == norm_name or norm_q in norm_name or norm_name in norm_q:
+            return p
+
+        score = SequenceMatcher(None, norm_q, norm_name).ratio()
+        if score > best_score:
+            best_score = score
+            best = p
+
+    if best is not None and best_score >= _SEARCH_THRESHOLD:
+        return best
+    return None
 
 
 def _search_place(site_id: int, query: str) -> Optional[Dict[str, Any]]:
@@ -95,12 +141,28 @@ def make_navigation_node(llm: OpenAILLM):
         )
 
         # ── 1. 특정 장소 검색 ──────────────────────────────────────────────
-        # place_name_query가 있을 때만 places/search 호출
+        # place_name_query가 있을 때만 검색 수행
         # (카테고리 질문: "화장실 어디야?" → place_name_query=null → 바로 nearby_places fallback)
-        place_name_query: Optional[str] = state.get("place_name_query")
+        #
+        # 검색 순서:
+        #   1) 이미 받아둔 nearby_places(거리순)에서 이름 매칭 → 있으면 pg_trgm 생략
+        #   2) 없으면 pg_trgm으로 사이트 전체 검색 (멀리 있는 장소 대응)
+        raw_place_name_query = state.get("place_name_query")
+        place_name_query: Optional[str] = (
+            raw_place_name_query.strip()
+            if isinstance(raw_place_name_query, str) and raw_place_name_query.strip()
+            else None
+        )
         place: Optional[Dict[str, Any]] = None
-        if site_id and place_name_query:
-            place = _search_place(site_id, place_name_query)
+        place_search_method: Optional[str] = None
+        if place_name_query:
+            place = _match_from_nearby(place_name_query, nearby_places)
+            if place:
+                place_search_method = "nearby_match"
+            elif site_id:
+                place = _search_place(site_id, place_name_query)
+                if place:
+                    place_search_method = "pg_trgm"
 
         if place:
             # ── 1-a. 카카오맵 도보 URL 생성 ───────────────────────────────
@@ -122,13 +184,20 @@ def make_navigation_node(llm: OpenAILLM):
                 map_url = f"https://map.kakao.com/link/to/{enc_dest},{dest_lat},{dest_lng}"
 
             # ── 1-b. LLM 답변 생성 ────────────────────────────────────────
+            desc = place.get("description") or ""
+            desc_part = f"\n위치설명 및 부가 설명: {desc}" if desc else ""
+            dist = place.get("distanceM")
+            dist_str = f"\n거리: 약 {dist:.0f}m" if isinstance(dist, (int, float)) else ""
+
             if user_language == "ko":
                 system_msg = (
                     f"{persona_block}\n"
                     "규칙:\n"
                     "  - 아래 장소 정보를 바탕으로 1~2문장으로 위치를 안내하세요\n"
+                    "  - '위치설명 및 부가 설명'이 있으면 반드시 포함해서 안내하세요\n"
+                    "  - 목록에 없는 정보를 지어내지 마세요\n"
                     "  - 이모지나 특수문자는 사용하지 마세요\n\n"
-                    f"장소: {place_name} (카테고리: {place.get('category')})\n\n"
+                    f"장소: {place_name} (카테고리: {place.get('category')}){dist_str}{desc_part}\n\n"
                     "반드시 아래 JSON 형식으로만 응답하세요 (마크다운 없이):\n"
                     '{"answer": "자연어 답변", "emotion": "GUIDING"}'
                 )
@@ -138,8 +207,10 @@ def make_navigation_node(llm: OpenAILLM):
                     "Rules:\n"
                     f"  - CRITICAL: Your entire answer MUST be in {lang_name}.\n"
                     f"  - Respond in {lang_name}, 1-2 sentences\n"
+                    "  - If '위치설명' is provided, include that location detail in your answer\n"
+                    "  - Do not invent location details not in the provided info\n"
                     "  - No emoji, no special characters\n\n"
-                    f"Place: {place_name} (category: {place.get('category')})\n\n"
+                    f"Place: {place_name} (category: {place.get('category')}){dist_str}{desc_part}\n\n"
                     "Return ONLY valid JSON (no markdown):\n"
                     '{"answer": "...", "emotion": "GUIDING"}'
                 )
@@ -168,9 +239,13 @@ def make_navigation_node(llm: OpenAILLM):
                 error_msg = str(e)
 
             if answer_text:
+                if map_url:
+                    guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
+                    answer_text = f"{answer_text} {guide}"
                 trace["navigation"] = {
                     "status": "ok",
                     "method": method,
+                    "search_method": place_search_method,
                     "place": place_name,
                     "similarity": place.get("similarity"),
                     "map_url": map_url,
@@ -302,6 +377,10 @@ def make_navigation_node(llm: OpenAILLM):
         }
         if error_msg:
             trace["navigation"]["error"] = error_msg
+
+        if map_url:
+            guide = _MAP_GUIDE.get(user_language, _MAP_GUIDE["en"])
+            answer_text = f"{answer_text} {guide}"
 
         return {
             "answer_text": answer_text,

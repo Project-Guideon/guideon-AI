@@ -56,7 +56,7 @@ class GraphState(TypedDict, total=False):
     mascot_event_style: str         # 이벤트/운영정보 스타일
 
     # ── intent_gate 추출 결과 ────────────────────────────────────────────
-    place_category: Optional[str]   # struct_db 라우트일 때 추출된 장소 카테고리 (ex: RESTROOM, PARKING)
+    place_categories: List[str]     # struct_db 라우트일 때 추출된 장소 카테고리 top2 (신뢰도 순, ex: ["TOILET", "INFO"]). fetch_places_node가 top1→top2 순으로 조회
     place_name_query: Optional[str] # 특정 장소명이 언급된 경우 (ex: "광화문") → navigation_node에서 places/search 호출
 
     # ── Spring Boot Core 에서 전달받은 위치 context ──────────────────────

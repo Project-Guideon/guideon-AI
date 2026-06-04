@@ -30,6 +30,25 @@ from app.core.language_profiles import get_profile
 
 router = APIRouter()
 
+try:
+    from num2words import num2words as _n2w
+    _HAS_NUM2WORDS = True
+except ImportError:
+    _HAS_NUM2WORDS = False
+
+_N2W_LANG = {"en": "en", "ja": "ja", "cmn": "zh", "fr": "fr", "es": "es"}
+
+
+def _expand_numbers(text: str, lang: str) -> str:
+    if not _HAS_NUM2WORDS or lang not in _N2W_LANG:
+        return text
+    def _replace(m):
+        try:
+            return _n2w(int(m.group()), lang=_N2W_LANG[lang])
+        except Exception:
+            return m.group()
+    return re.sub(r'(?<!\d)\d+(?!\d)', _replace, text)
+
 
 # ──────────────────────────────────────────────
 # 유틸리티
@@ -208,6 +227,9 @@ async def _synthesize_sentence(
     Returns:
         (audio_bytes, audio_format) — audio_format은 Unity 클라이언트에 전달되는 포맷 문자열
     """
+    lang = tts_language_code.split("-")[0].lower()
+    sentence = _expand_numbers(sentence, lang)
+
     if cartesia_tts is not None:
         try:
             audio = await cartesia_tts.synthesize_async(sentence, tts_language_code, voice_id=voice_id)
