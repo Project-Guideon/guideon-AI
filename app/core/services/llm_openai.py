@@ -74,12 +74,16 @@ class OpenAILLM:
     # ---------------------------------
     # 기본 chat 호출 (동기)
     # ---------------------------------
-    def chat(self, messages: list, max_tokens: int = None) -> str:
+    def chat(self, messages: list, max_tokens: int = None, json_mode: bool = False) -> str:
+        kwargs = {}
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
         response = self.sync_client.chat.completions.create(
             model=self.cfg.model,
             messages=messages,
             temperature=self.cfg.temperature,
             max_tokens=max_tokens or self.cfg.max_tokens,
+            **kwargs,
         )
         return (response.choices[0].message.content or "").strip()
 

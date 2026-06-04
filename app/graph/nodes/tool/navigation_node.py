@@ -253,7 +253,7 @@ def make_navigation_node(llm: OpenAILLM):
             raw = ""
 
             try:
-                raw = llm.chat(messages, max_tokens=200)
+                raw = llm.chat(messages, max_tokens=200, json_mode=True)
                 parsed = json.loads(raw)
                 if not isinstance(parsed, dict):
                     raise ValueError("LLM response must be a JSON object")
@@ -372,7 +372,7 @@ def make_navigation_node(llm: OpenAILLM):
         raw = ""
 
         try:
-            raw = llm.chat(messages, max_tokens=200)
+            raw = llm.chat(messages, max_tokens=200, json_mode=True)
             parsed = json.loads(raw)
             if not isinstance(parsed, dict):
                 raise ValueError("LLM response must be a JSON object")
