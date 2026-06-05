@@ -695,7 +695,7 @@ async def ws_stream(websocket: WebSocket):
                     "language_code": final_answer_language, "query": query,
                     "answer": answer_text, "category": qa_category,
                     "answer_found": qa_answer_found,
-                    "map_url": qa_map_url,
+                    "mapUrl": qa_map_url,
                     "response_time_ms": response_time_ms,
                     "trace_id": trace_id,
                 })
@@ -718,7 +718,7 @@ async def ws_stream(websocket: WebSocket):
                     "language_code": final_answer_language, "query": query,
                     "answer": answer_text, "category": qa_category,
                     "answer_found": qa_answer_found,
-                    "map_url": qa_map_url,
+                    "mapUrl": qa_map_url,
                     "response_time_ms": response_time_ms,
                     "trace_id": trace_id,
                 })
