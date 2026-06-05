@@ -27,6 +27,7 @@ class TextQAResult:
     category: str = "GENERAL"
     answer_language: str = "ko"
     answer_found: bool = False
+    map_url: str | None = None   # navigation 답변일 때 카카오맵 URL (websocket이 getattr로 읽어 mapUrl로 송출)
     contexts: List[Dict[str, Any]] = field(default_factory=list)
     trace: Dict[str, Any] = field(default_factory=dict)
 
@@ -90,6 +91,7 @@ class TextPipeline:
             category=result.get("category") or "GENERAL",
             answer_language=result.get("answer_language") or result.get("user_language") or lang2,
             answer_found=result.get("check_result") == "good",
+            map_url=result.get("map_url"),
             contexts=result.get("retrieved_chunks", []),
             trace=result.get("trace", {}),
         )
